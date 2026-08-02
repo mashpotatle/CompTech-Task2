@@ -196,19 +196,26 @@ class CaveSection:
 
                     pygame.draw.lines(
                         screen,
-                        (120, 130, 135),
+                        (130, 140, 145),
                         True,
                         screen_polygon,
                         2,
                     )
 
-        # Draw solid obstacles.
+    def draw_obstacles(
+        self,
+        screen: pygame.Surface,
+        camera,
+        debug: bool = False,
+    ) -> None:
+        """
+        Draw solid obstacles in the cave section.
+        """
+
         for obstacle in self.get_obstacles():
 
-            # Convert local geometry into world coordinates.
             world_polygon = obstacle.get_polygon()
 
-            # Convert world coordinates into screen coordinates.
             screen_polygon = [
                 camera.world_to_screen(point)
                 for point in world_polygon
@@ -231,3 +238,23 @@ class CaveSection:
                         screen_polygon,
                         2,
                     )
+
+
+@dataclass
+class SectionInstance:
+    """
+    A generated world instance of a cave section template.
+
+    Templates are immutable JSON-defined section definitions. Each
+    instance represents one physical occurrence of that template in
+    the generated world, with its own world position and runtime
+    state.
+    """
+
+    instance_id: int
+    template_filename: str
+    section: CaveSection
+    world_offset: pygame.Vector2 = field(
+        default_factory=lambda: pygame.Vector2(0, 0)
+    )
+    runtime_state: dict[str, Any] = field(default_factory=dict)

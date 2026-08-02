@@ -137,10 +137,14 @@ class Game:
 
         # Load the first section into the world.
 
-        self.cave_section = (
+        self.current_section_instance = (
             self.level_manager.load_initial_section(
                 "section_01.json"
             )
+        )
+
+        self.cave_section = (
+            self.current_section_instance.section
         )
 
         # ----------------------------------------------------------
@@ -334,17 +338,18 @@ class Game:
         Generate and stitch the next random cave section.
         """
 
-        next_section = (
+        next_instance = (
             self.level_manager.generate_next_random_section()
         )
 
-        if next_section is None:
+        if next_instance is None:
             print(
                 "No more sections available for generation."
             )
             return
 
-        self.cave_section = next_section
+        self.current_section_instance = next_instance
+        self.cave_section = next_instance.section
 
         self.update_collision_geometry()
         

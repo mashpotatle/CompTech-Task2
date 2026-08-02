@@ -8,6 +8,7 @@ import pygame
 from levels.cave_section import (
     CaveSection,
     LevelElement,
+    SectionInstance,
 )
 from levels.level_loader import LevelLoader
 
@@ -75,43 +76,11 @@ class LevelManager:
         # physically through the generated world.
 
         self.sections: list[
-            CaveSection
+            SectionInstance
         ] = []
 
-        # Permanent world offset for every loaded section.
-
-        self.section_offsets: list[
-            pygame.Vector2
-        ] = []
-
-        # Filename used to create each section.
-
-        self.section_filenames: list[
-            str
-        ] = []
-
-        # ----------------------------------------------------------
-        # Runtime section state
-        # ----------------------------------------------------------
-
-        # Runtime state is kept separately from the original JSON
-        # data.
-        #
-        # This can contain:
-        #
-        # - Dropped items
-        # - Collected items
-        # - Destroyed objects
-        # - Trigger states
-        # - Opened containers
-        # - Other temporary gameplay changes
-        #
-        # The state remains in memory while the section is loaded.
-
-        self.section_runtime_state: dict[
-            str,
-            dict,
-        ] = {}
+        # Runtime state is kept on each instance so the same template
+        # can be instantiated multiple times without sharing state.
 
         # ----------------------------------------------------------
         # Active section
@@ -140,7 +109,7 @@ class LevelManager:
     def load_initial_section(
         self,
         filename: str,
-    ) -> CaveSection:
+    ) -> SectionInstance:
         """
         Load the initial cave section.
 
@@ -159,34 +128,19 @@ class LevelManager:
 
         self.sections.clear()
 
-        self.section_offsets.clear()
-
-        self.section_filenames.clear()
-
-        self.section_runtime_state.clear()
-
         # ----------------------------------------------------------
         # Add initial section
         # ----------------------------------------------------------
 
-        self.sections.append(
-            section
+        instance = SectionInstance(
+            instance_id=0,
+            template_filename=filename,
+            section=section,
+            world_offset=pygame.Vector2(0, 0),
+            runtime_state={},
         )
 
-        self.section_offsets.append(
-            pygame.Vector2(
-                0,
-                0,
-            )
-        )
-
-        self.section_filenames.append(
-            filename
-        )
-
-        self.section_runtime_state[
-            filename
-        ] = {}
+        self.sections.append(instance)
 
         # ----------------------------------------------------------
         # Generation state
@@ -200,7 +154,7 @@ class LevelManager:
             filename
         )
 
-        return section
+        return instance
 
     # ==================================================================
     # RANDOM SECTION SELECTION
@@ -260,7 +214,10 @@ class LevelManager:
             filename
             for filename in valid_sections
             if filename
-            not in self.section_filenames
+            not in {
+                instance.template_filename
+                for instance in self.sections
+            }
         ]
 
         if unloaded_sections:
@@ -310,7 +267,7 @@ class LevelManager:
 
     def generate_next_random_section(
         self,
-    ) -> CaveSection | None:
+    ) -> SectionInstance | None:
         """
         Generate and stitch a randomly selected cave section.
 
@@ -344,7 +301,7 @@ class LevelManager:
     def stitch_next_section(
         self,
         filename: str,
-    ) -> CaveSection:
+    ) -> SectionInstance:
         """
         Load and attach a section after the current final section.
 
@@ -357,26 +314,6 @@ class LevelManager:
         section is returned instead of creating a duplicate.
         """
 
-        # ----------------------------------------------------------
-        # Prevent duplicate loaded sections
-        # ----------------------------------------------------------
-
-        existing_index = (
-            self._find_section_index(
-                filename
-            )
-        )
-
-        if existing_index is not None:
-
-            return self.sections[
-                existing_index
-            ]
-
-        # ----------------------------------------------------------
-        # Empty world
-        # ----------------------------------------------------------
-
         if not self.sections:
 
             return self.load_initial_section(
@@ -387,12 +324,16 @@ class LevelManager:
         # Current final section
         # ----------------------------------------------------------
 
-        current_section = (
+        current_instance = (
             self.sections[-1]
         )
 
+        current_section = (
+            current_instance.section
+        )
+
         current_offset = (
-            self.section_offsets[-1]
+            current_instance.world_offset
         )
 
         # ----------------------------------------------------------
@@ -427,21 +368,15 @@ class LevelManager:
         # Add section
         # ----------------------------------------------------------
 
-        self.sections.append(
-            next_section
+        next_instance = SectionInstance(
+            instance_id=self.generated_section_count,
+            template_filename=filename,
+            section=next_section,
+            world_offset=next_offset,
+            runtime_state={},
         )
 
-        self.section_offsets.append(
-            next_offset
-        )
-
-        self.section_filenames.append(
-            filename
-        )
-
-        self.section_runtime_state[
-            filename
-        ] = {}
+        self.sections.append(next_instance)
 
         # ----------------------------------------------------------
         # Update generation state
@@ -453,7 +388,7 @@ class LevelManager:
             filename
         )
 
-        return next_section
+        return next_instance
 
     # ==================================================================
     # BACKWARD STITCHING
@@ -462,7 +397,7 @@ class LevelManager:
     def stitch_previous_section(
         self,
         filename: str,
-    ) -> CaveSection:
+    ) -> SectionInstance:
         """
         Load and attach a section before the current first section.
 
@@ -476,26 +411,6 @@ class LevelManager:
         and preserves them for backtracking.
         """
 
-        # ----------------------------------------------------------
-        # Prevent duplicate loaded sections
-        # ----------------------------------------------------------
-
-        existing_index = (
-            self._find_section_index(
-                filename
-            )
-        )
-
-        if existing_index is not None:
-
-            return self.sections[
-                existing_index
-            ]
-
-        # ----------------------------------------------------------
-        # Empty world
-        # ----------------------------------------------------------
-
         if not self.sections:
 
             return self.load_initial_section(
@@ -506,12 +421,16 @@ class LevelManager:
         # Current first section
         # ----------------------------------------------------------
 
-        current_section = (
+        current_instance = (
             self.sections[0]
         )
 
+        current_section = (
+            current_instance.section
+        )
+
         current_offset = (
-            self.section_offsets[0]
+            current_instance.world_offset
         )
 
         # ----------------------------------------------------------
@@ -546,24 +465,15 @@ class LevelManager:
         # Insert section
         # ----------------------------------------------------------
 
-        self.sections.insert(
-            0,
-            previous_section,
+        previous_instance = SectionInstance(
+            instance_id=self.generated_section_count,
+            template_filename=filename,
+            section=previous_section,
+            world_offset=previous_offset,
+            runtime_state={},
         )
 
-        self.section_offsets.insert(
-            0,
-            previous_offset,
-        )
-
-        self.section_filenames.insert(
-            0,
-            filename,
-        )
-
-        self.section_runtime_state[
-            filename
-        ] = {}
+        self.sections.insert(0, previous_instance)
 
         # ----------------------------------------------------------
         # Update active section index
@@ -573,7 +483,7 @@ class LevelManager:
 
         self.generated_section_count += 1
 
-        return previous_section
+        return previous_instance
 
     # ==================================================================
     # ACTIVE SECTION
@@ -590,15 +500,12 @@ class LevelManager:
         between sections.
         """
 
-        for index, (
-            section,
-            offset,
-        ) in enumerate(
-            zip(
-                self.sections,
-                self.section_offsets,
-            )
+        for index, instance in enumerate(
+            self.sections
         ):
+
+            section = instance.section
+            offset = instance.world_offset
 
             section_rect = pygame.Rect(
                 round(
@@ -629,9 +536,9 @@ class LevelManager:
 
     def get_current_section(
         self,
-    ) -> CaveSection | None:
+    ) -> SectionInstance | None:
         """
-        Return the section currently marked as active.
+        Return the section instance currently marked as active.
         """
 
         if not self.sections:
@@ -668,15 +575,10 @@ class LevelManager:
 
         world_elements = []
 
-        for (
-            section,
-            offset,
-            filename,
-        ) in zip(
-            self.sections,
-            self.section_offsets,
-            self.section_filenames,
-        ):
+        for instance in self.sections:
+
+            section = instance.section
+            offset = instance.world_offset
 
             # ------------------------------------------------------
             # Static section elements
@@ -702,12 +604,7 @@ class LevelManager:
             # Runtime elements
             # ------------------------------------------------------
 
-            runtime_state = (
-                self.section_runtime_state.get(
-                    filename,
-                    {},
-                )
-            )
+            runtime_state = instance.runtime_state
 
             dropped_items = (
                 runtime_state.get(
@@ -740,29 +637,22 @@ class LevelManager:
 
     def get_runtime_state(
         self,
-        filename: str,
+        instance: SectionInstance,
     ) -> dict:
         """
-        Return mutable runtime state belonging to a section.
+        Return mutable runtime state belonging to a section instance.
 
         The state is created automatically if required.
         """
 
-        if filename not in (
-            self.section_runtime_state
-        ):
+        if not instance.runtime_state:
+            instance.runtime_state = {}
 
-            self.section_runtime_state[
-                filename
-            ] = {}
-
-        return self.section_runtime_state[
-            filename
-        ]
+        return instance.runtime_state
 
     def add_dropped_item(
         self,
-        filename: str,
+        instance: SectionInstance,
         item: LevelElement,
     ):
         """
@@ -776,7 +666,7 @@ class LevelManager:
 
         runtime_state = (
             self.get_runtime_state(
-                filename
+                instance
             )
         )
 
@@ -799,7 +689,7 @@ class LevelManager:
 
     def remove_dropped_item(
         self,
-        filename: str,
+        instance: SectionInstance,
         element_id: str,
     ):
         """
@@ -808,7 +698,7 @@ class LevelManager:
 
         runtime_state = (
             self.get_runtime_state(
-                filename
+                instance
             )
         )
 
@@ -867,10 +757,10 @@ class LevelManager:
             "-inf"
         )
 
-        for section, offset in zip(
-            self.sections,
-            self.section_offsets,
-        ):
+        for instance in self.sections:
+
+            offset = instance.world_offset
+            section = instance.section
 
             minimum_x = min(
                 minimum_x,
@@ -927,13 +817,12 @@ class LevelManager:
 
             return None
 
-        section = (
+        instance = (
             self.sections[-1]
         )
 
-        offset = (
-            self.section_offsets[-1]
-        )
+        offset = instance.world_offset
+        section = instance.section
 
         return (
             offset
@@ -952,13 +841,12 @@ class LevelManager:
 
             return None
 
-        section = (
+        instance = (
             self.sections[0]
         )
 
-        offset = (
-            self.section_offsets[0]
-        )
+        offset = instance.world_offset
+        section = instance.section
 
         return (
             offset
@@ -988,22 +876,23 @@ class LevelManager:
         index: int,
     ) -> str | None:
         """
-        Return the filename associated with a loaded section index.
+        Return the template filename associated with a loaded section
+        instance index.
         """
 
         if not (
             0
             <= index
             < len(
-                self.section_filenames
+                self.sections
             )
         ):
 
             return None
 
-        return self.section_filenames[
+        return self.sections[
             index
-        ]
+        ].template_filename
 
     def get_loaded_section_count(
         self,
@@ -1025,18 +914,16 @@ class LevelManager:
         filename: str,
     ) -> int | None:
         """
-        Find a currently loaded section by filename.
+        Find a currently loaded section by template filename.
         """
 
-        try:
+        for index, instance in enumerate(
+            self.sections
+        ):
+            if instance.template_filename == filename:
+                return index
 
-            return self.section_filenames.index(
-                filename
-            )
-
-        except ValueError:
-
-            return None
+        return None
 
     @staticmethod
     def _copy_element(
