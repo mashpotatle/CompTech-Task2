@@ -6,6 +6,9 @@ maintain and allows gameplay settings to be changed without searching
 through the entire codebase.
 """
 
+from dataclasses import dataclass
+
+
 # ---------------------------------------------------------------------------
 # Display Settings
 # ---------------------------------------------------------------------------
@@ -42,3 +45,22 @@ DEBUG_COLLISION = True
 
 # Displays the player's collision rectangle.
 DEBUG_PLAYER_COLLISION = True
+
+
+# ---------------------------------------------------------------------------
+# Runtime Settings / Save Data
+# ---------------------------------------------------------------------------
+
+@dataclass
+class RuntimeSettings:
+    """Persisted gameplay and UI state for the current run."""
+
+    color_blind_mode: bool = False
+    master_volume: int = 80
+    ambience_volume: int = 50
+    menus_volume: int = 100
+    game_volume: int = 100
+    max_distance_travelled: int = 0
+
+
+SETTINGS = RuntimeSettings()

@@ -18,6 +18,7 @@ from levels.level_manager import LevelManager
 from levels.cave_section import LevelElement
 from systems.collision import CollisionSystem
 from systems.camera import Camera
+from ui.menus import EndlessRunConfirmation, MainMenu, PauseMenu
 
 from settings import (
     DEBUG_COLLISION,
@@ -83,9 +84,22 @@ class Game:
         # Game state
         # ----------------------------------------------------------
 
-        # Gameplay is currently started directly.
-        # The main menu system can be connected here later.
-        self.game_state = GameState.PLAYING
+        # Start on the main menu so the new launch screen is visible.
+        self.game_state = GameState.MAIN_MENU
+
+        self.pause_menu = PauseMenu(
+            SCREEN_WIDTH,
+            SCREEN_HEIGHT,
+        )
+        self.main_menu = MainMenu(
+            SCREEN_WIDTH,
+            SCREEN_HEIGHT,
+        )
+        self.endless_run_confirmation = EndlessRunConfirmation(
+            SCREEN_WIDTH,
+            SCREEN_HEIGHT,
+        )
+        self.showing_endless_confirmation = False
 
         # Controls whether the main game loop continues running.
         self.running = True
@@ -199,12 +213,51 @@ class Game:
         Additional keyboard and menu events can be added later.
         """
 
+        mouse_pos = pygame.mouse.get_pos()
+
+        mouse_pos = pygame.mouse.get_pos()
+
         for event in pygame.event.get():
 
             # pygame.QUIT is generated when the player closes
             # the application window.
             if event.type == pygame.QUIT:
                 self.running = False
+
+            if self.game_state == GameState.MAIN_MENU and not self.showing_endless_confirmation:
+                action = self.main_menu.handle_events(event, mouse_pos)
+                if action == "PLAY":
+                    self.showing_endless_confirmation = True
+                elif action == "EXIT":
+                    self.running = False
+
+            if self.showing_endless_confirmation:
+                action = self.endless_run_confirmation.handle_events(event, mouse_pos)
+                if action == "START_ENDLESS":
+                    self.showing_endless_confirmation = False
+                    self.game_state = GameState.PLAYING
+                elif action == "CANCEL":
+                    self.showing_endless_confirmation = False
+
+            if self.game_state == GameState.PLAYING and event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+                self.game_state = GameState.PAUSED
+                self.pause_menu.confirming_quit = False
+
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                if self.game_state == GameState.PLAYING:
+                    self.game_state = GameState.PAUSED
+                elif self.game_state == GameState.PAUSED:
+                    self.game_state = GameState.PLAYING
+                    self.pause_menu.confirming_quit = False
+
+            if self.game_state == GameState.PAUSED:
+                action = self.pause_menu.handle_events(event, mouse_pos)
+                if action == "RESUME":
+                    self.game_state = GameState.PLAYING
+                    self.pause_menu.confirming_quit = False
+                elif action == "QUIT_TO_MENU":
+                    self.game_state = GameState.MAIN_MENU
+                    self.pause_menu.confirming_quit = False
 
     # ==================================================================
     # GAME UPDATE
@@ -254,11 +307,7 @@ class Game:
         self,
         delta_time: float,
     ):
-        """
-        Update logic for the main menu.
-
-        Main menu functionality will be implemented later.
-        """
+        """Handle main-menu state transitions."""
 
         pass
 
@@ -476,7 +525,7 @@ class Game:
             )
         )
 
-        if self.game_state == GameState.PLAYING:
+        if self.game_state in (GameState.PLAYING, GameState.PAUSED):
 
             # ------------------------------------------------------
             # Draw level geometry
@@ -528,6 +577,14 @@ class Game:
                     debug_rect,
                     1,
                 )
+
+        if self.game_state == GameState.PAUSED:
+            self.pause_menu.draw(self.screen)
+        elif self.game_state == GameState.MAIN_MENU:
+            self.main_menu.draw(self.screen)
+
+        if self.showing_endless_confirmation:
+            self.endless_run_confirmation.draw(self.screen)
 
         # ----------------------------------------------------------
         # Debug information
