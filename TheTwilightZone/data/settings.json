@@ -1,0 +1,4 @@
+# settings.py
+
+PLAYER_WIDTH = 40
+PLAYER_HEIGHT = 40

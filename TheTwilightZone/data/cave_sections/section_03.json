@@ -1,0 +1,62 @@
+{
+    "format_version": 1,
+    "id": "section_01",
+    "name": "New Cave Section",
+    "width": 2048,
+    "height": 768,
+    "entry": {
+        "position": [
+            5.424,
+            386.819
+        ],
+        "direction": "right"
+    },
+    "exit": {
+        "position": [
+            1998.0,
+            384.0
+        ],
+        "direction": "right"
+    },
+    "elements": [
+        {
+            "id": "wall_001",
+            "type": "wall",
+            "position": [
+                7.571,
+                487.744
+            ],
+            "geometry": {
+                "points": [
+                    [
+                        0.0,
+                        38.652
+                    ],
+                    [
+                        1075.821,
+                        257.682
+                    ],
+                    [
+                        2029.243,
+                        0.0
+                    ]
+                ]
+            },
+            "material": {
+                "texture": null,
+                "mapping": {
+                    "mode": "world",
+                    "origin": [
+                        0,
+                        0
+                    ],
+                    "scale": [
+                        1.0,
+                        1.0
+                    ],
+                    "rotation": 0
+                }
+            }
+        }
+    ]
+}
