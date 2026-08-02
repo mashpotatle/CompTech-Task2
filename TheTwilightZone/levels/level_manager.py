@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pygame
 
+from settings import PRELOAD_SECTION_COUNT
 from levels.cave_section import (
     CaveSection,
     LevelElement,
@@ -40,6 +41,7 @@ class LevelManager:
         self,
         data_directory: str | Path,
         available_sections: list[str],
+        preload_section_count: int | None = None,
     ):
         """
         Initialise the level manager.
@@ -64,8 +66,24 @@ class LevelManager:
         # These are the pre-built cave sections that can be selected
         # during procedural generation.
 
+        discovered_sections = [
+            path.name
+            for path in sorted(
+                (Path(data_directory)).glob("*.json")
+            )
+            if path.is_file()
+        ]
+
         self.available_sections = list(
-            available_sections
+            dict.fromkeys(
+                [*available_sections, *discovered_sections]
+            )
+        )
+
+        self.preload_section_count = (
+            preload_section_count
+            if preload_section_count is not None
+            else PRELOAD_SECTION_COUNT
         )
 
         # ----------------------------------------------------------
@@ -154,7 +172,56 @@ class LevelManager:
             filename
         )
 
+        self._preload_following_sections()
+
         return instance
+
+    def _get_loaded_sections_ahead_count(self) -> int:
+        """
+        Return how many loaded section instances sit after the current
+        active section.
+        """
+
+        if not self.sections:
+            return 0
+
+        if not (
+            0
+            <= self.current_section_index
+            < len(self.sections)
+        ):
+            return 0
+
+        return max(
+            0,
+            len(self.sections)
+            - self.current_section_index
+            - 1,
+        )
+
+    def _preload_following_sections(self) -> None:
+        """
+        Ensure the current active section has the configured number of
+        sections loaded ahead of it so transitions remain smooth.
+        """
+
+        if self.preload_section_count <= 0:
+            return
+
+        while (
+            self._get_loaded_sections_ahead_count()
+            < self.preload_section_count
+        ):
+            next_filename = (
+                self.get_random_section_filename()
+            )
+
+            if next_filename is None:
+                return
+
+            self.stitch_next_section(
+                next_filename
+            )
 
     # ==================================================================
     # RANDOM SECTION SELECTION
@@ -530,6 +597,8 @@ class LevelManager:
                     index
                 )
 
+                self._preload_following_sections()
+
                 return index
 
         return None
@@ -556,6 +625,73 @@ class LevelManager:
         return self.sections[
             self.current_section_index
         ]
+
+    def transition_to_next_section(
+        self,
+        player_position: pygame.Vector2,
+        movement_direction: pygame.Vector2 | None = None,
+    ) -> SectionInstance | None:
+        """
+        Move the player to the next section instance if they have
+        reached the current section's exit.
+
+        If the next section instance already exists in the generated
+        world, the player is moved into that instance directly.
+        Otherwise a new random section is generated and stitched to
+        the end of the world.
+        """
+
+        current_instance = (
+            self.get_current_section()
+        )
+
+        if current_instance is None:
+            return None
+
+        current_exit_world = (
+            current_instance.world_offset
+            + current_instance.section.exit_position
+        )
+
+        if movement_direction is not None:
+            if movement_direction.x < 0:
+                return None
+            if movement_direction.x == 0 and movement_direction.y == 0:
+                return None
+
+        if (
+            player_position.distance_to(
+                current_exit_world
+            )
+            > 100
+        ):
+            return None
+
+        next_index = (
+            self.current_section_index + 1
+        )
+
+        if next_index < len(self.sections):
+            self.current_section_index = (
+                next_index
+            )
+            self._preload_following_sections()
+            return self.sections[next_index]
+
+        next_instance = (
+            self.generate_next_random_section()
+        )
+
+        if next_instance is None:
+            return None
+
+        self.current_section_index = (
+            len(self.sections) - 1
+        )
+
+        self._preload_following_sections()
+
+        return next_instance
 
     # ==================================================================
     # WORLD ELEMENTS

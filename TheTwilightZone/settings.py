@@ -25,6 +25,10 @@ PLAYER_HEIGHT = 40
 # The target frame rate specified in the game design document.
 TARGET_FPS = 60
 
+# Number of sections to load ahead of the player so transitions feel
+# smoother. Set to 0 to disable preloading.
+PRELOAD_SECTION_COUNT = 3
+
 # ---------------------------------------------------------------------------
 # Debug Settings
 # ---------------------------------------------------------------------------

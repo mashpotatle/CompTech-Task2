@@ -125,14 +125,17 @@ class Game:
         # New sections are selected randomly when the player reaches
         # the end of the currently generated world.
 
+        available_sections = [
+            path.name
+            for path in sorted(
+                level_data_directory.glob("*.json")
+            )
+            if path.is_file()
+        ]
+
         self.level_manager = LevelManager(
             level_data_directory,
-            available_sections=[
-                "section_01.json",
-                "section_02.json",
-                "section_03.json",
-                "section_04.json",
-            ],
+            available_sections=available_sections,
         )
 
         # Load the first section into the world.
@@ -304,6 +307,15 @@ class Game:
             self.player.position
         )
 
+        self.current_section_instance = (
+            self.level_manager.get_current_section()
+        )
+
+        if self.current_section_instance is not None:
+            self.cave_section = (
+                self.current_section_instance.section
+            )
+
         # ----------------------------------------------------------
         # Generate more world
         # ----------------------------------------------------------
@@ -317,8 +329,16 @@ class Game:
         self.update_camera()
 
     def check_section_exit(self):
+        current_instance = (
+            self.level_manager.get_current_section()
+        )
+
+        if current_instance is None:
+            return
+
         exit_position = (
-            self.level_manager.get_last_exit_position()
+            self.level_manager.get_last_exit_position(
+            )
         )
 
         if exit_position is None:
@@ -335,11 +355,16 @@ class Game:
 
     def load_next_section(self):
         """
-        Generate and stitch the next random cave section.
+        Move into the next generated section instance if one exists,
+        or generate a new random section when the player reaches the
+        current section's exit.
         """
 
         next_instance = (
-            self.level_manager.generate_next_random_section()
+            self.level_manager.transition_to_next_section(
+                self.player.position,
+                self.player.velocity,
+            )
         )
 
         if next_instance is None:
@@ -352,6 +377,7 @@ class Game:
         self.cave_section = next_instance.section
 
         self.update_collision_geometry()
+        self.update_camera()
         
     # ==================================================================
     # COLLISION
@@ -396,24 +422,9 @@ class Game:
         sections are loaded or unloaded.
         """
 
-        target_x = (
-            self.player.position.x
-            - SCREEN_WIDTH / 2
-        )
-
-        target_y = (
-            self.player.position.y
-            - SCREEN_HEIGHT / 2
-        )
-
-        self.camera.position.x = max(
-            0,
-            target_x,
-        )
-
-        self.camera.position.y = max(
-            0,
-            target_y,
+        self.camera.update(
+            self.player.position,
+            self.level_manager.get_world_bounds(),
         )
 
     # ==================================================================

@@ -49,14 +49,11 @@ class Camera:
             - self.screen_height / 2
         )
 
-        # Clamp camera to the actual world bounds.
+        # Clamp camera to the actual world bounds while keeping
+        # horizontal follow behavior intact.
         self.position.x = max(
             world_bounds.left,
-            min(
-                target_x,
-                world_bounds.right
-                - self.screen_width,
-            ),
+            target_x,
         )
 
         self.position.y = max(
