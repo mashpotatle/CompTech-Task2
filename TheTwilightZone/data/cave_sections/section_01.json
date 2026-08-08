@@ -6,15 +6,15 @@
     "height": 768,
     "entry": {
         "position": [
-            50.0,
-            384.0
+            0.485,
+            391.502
         ],
         "direction": "right"
     },
     "exit": {
         "position": [
-            2036.593,
-            384.943
+            1998.0,
+            384.0
         ],
         "direction": "right"
     },
@@ -23,22 +23,22 @@
             "id": "wall_001",
             "type": "wall",
             "position": [
-                2.47,
-                39.416
+                564.652,
+                153.342
             ],
             "geometry": {
                 "points": [
                     [
+                        122.984,
+                        203.022
+                    ],
+                    [
                         0.0,
-                        83.942
-                    ],
-                    [
-                        1854.527,
-                        232.304
-                    ],
-                    [
-                        2039.979,
                         0.0
+                    ],
+                    [
+                        472.416,
+                        7.809
                     ]
                 ]
             },
@@ -56,6 +56,78 @@
                     ],
                     "rotation": 0
                 }
+            }
+        },
+        {
+            "id": "wall_002",
+            "type": "wall",
+            "position": [
+                1259.611,
+                213.858
+            ],
+            "geometry": {
+                "points": [
+                    [
+                        0.0,
+                        265.49
+                    ],
+                    [
+                        152.266,
+                        0.0
+                    ],
+                    [
+                        398.235,
+                        97.607
+                    ]
+                ]
+            },
+            "material": {
+                "texture": null,
+                "mapping": {
+                    "mode": "world",
+                    "origin": [
+                        0,
+                        0
+                    ],
+                    "scale": [
+                        1.0,
+                        1.0
+                    ],
+                    "rotation": 0
+                }
+            }
+        },
+        {
+            "id": "fish_spawn_003",
+            "type": "fish_spawn",
+            "position": [
+                861.376,
+                370.029
+            ],
+            "properties": {
+                "count": 3
+            }
+        },
+        {
+            "id": "fish_spawn_004",
+            "type": "fish_spawn",
+            "position": [
+                1304.51,
+                129.916
+            ],
+            "properties": {
+                "count": 3
+            }
+        },
+        {
+            "id": "fish_spawn_005",
+            "type": "fish_spawn",
+            "position": [
+                1206.904,
+                582.811
+            ],
+            "properties": {
+                "count": 3
             }
         }
     ]
