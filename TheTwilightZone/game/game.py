@@ -11,6 +11,7 @@ the level data itself. Level data is managed by LevelManager.
 from pathlib import Path
 
 import pygame
+import random
 
 from game.game_state import GameState
 from entities.player import Player
@@ -19,6 +20,7 @@ from levels.cave_section import LevelElement
 from systems.collision import CollisionSystem
 from systems.camera import Camera
 from ui.menus import EndlessRunConfirmation, MainMenu, PauseMenu
+from entities.fish import Fish
 
 from settings import (
     DEBUG_COLLISION,
@@ -176,6 +178,14 @@ class Game:
         self.player = Player(
             self.cave_section.entry_position.copy()
         )
+
+        # ----------------------------------------------------------
+        # Fish
+        # ----------------------------------------------------------
+
+        self.fish = pygame.sprite.Group()
+
+        self.spawn_fish_from_level()
 
         # ----------------------------------------------------------
         # Collision system
@@ -347,6 +357,22 @@ class Game:
             delta_time,
             self.collision_system,
         )
+
+        # ----------------------------------------------------------
+        # Fish
+        # ----------------------------------------------------------
+
+        for fish in self.fish:
+
+            fish.update(
+                delta_time,
+                self.player.position,
+            )
+
+            if fish.check_player_collision(
+                self.player.rect
+            ):
+                self.handle_fish_damage(fish)
 
         # ----------------------------------------------------------
         # Active section
@@ -532,6 +558,25 @@ class Game:
             # ------------------------------------------------------
 
             self.draw_level()
+
+            # ------------------------------------------------------
+            # Draw fish
+            # ------------------------------------------------------
+
+            for fish in self.fish:
+                fish.draw(
+                    self.screen,
+                    self.camera,
+                )
+
+            # ------------------------------------------------------
+            # Draw player
+            # ------------------------------------------------------
+
+            self.player.draw(
+                self.screen,
+                self.camera,
+            )
 
             # ------------------------------------------------------
             # Draw player
@@ -765,6 +810,108 @@ class Game:
                 20,
                 20,
             ),
+        )
+
+    def spawn_fish_from_level(self):
+        """
+        Create fish from all fish_spawn elements in the
+        currently loaded world.
+
+        Fish spawn positions are already converted into world
+        coordinates by LevelManager.
+        """
+
+        self.fish.empty()
+
+        elements = (
+            self.level_manager.get_all_elements()
+        )
+
+        for element in elements:
+
+            if element.element_type != "fish_spawn":
+                continue
+
+            properties = element.properties
+
+            count = int(
+                properties.get(
+                    "count",
+                    1,
+                )
+            )
+
+            speed = float(
+                properties.get(
+                    "speed",
+                    70,
+                )
+            )
+
+            detection_range = float(
+                properties.get(
+                    "detection_range",
+                    180,
+                )
+            )
+
+            damage = int(
+                properties.get(
+                    "damage",
+                    10,
+                )
+            )
+
+            patrol_distance = float(
+                properties.get(
+                    "patrol_distance",
+                    150,
+                )
+            )
+
+            direction = properties.get(
+                "direction",
+                [1, 0],
+            )
+
+            for index in range(count):
+
+                # Spread members of a fish group around
+                # the spawn point rather than stacking them.
+                spawn_position = (
+                    element.position
+                    + pygame.Vector2(
+                        random.uniform(-30, 30),
+                        random.uniform(-30, 30),
+                    )
+                )
+
+                fish = Fish(
+                    position=spawn_position,
+                    spawn_id=element.element_id,
+                    patrol_direction=direction,
+                    patrol_distance=patrol_distance,
+                    speed=speed,
+                    detection_range=detection_range,
+                    damage=damage,
+                )
+
+                self.fish.add(fish)
+
+    def handle_fish_damage(
+        self,
+        fish: Fish,
+    ) -> None:
+        """
+        Handle damage caused by a fish.
+
+        This is intentionally kept separate from Fish so the entity
+        does not need to know about the game's health/death system.
+        """
+
+        print(
+            f"Fish {fish.spawn_id} hit the player "
+            f"for {fish.damage} damage."
         )
 
     # ==================================================================
