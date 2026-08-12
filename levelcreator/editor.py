@@ -87,8 +87,6 @@ class LevelEditor:
             "current",
             "item",
             "lore_fragment",
-            "entry",
-            "exit",
         ]
 
         self.ensure_data_dir()
@@ -288,11 +286,6 @@ class LevelEditor:
             self.drawing.clear()
             return
 
-        if event.key == pygame.K_e:
-            self.tool = "entry"
-        elif event.key == pygame.K_x:
-            self.tool = "exit"
-
         if self.selected:
             delta = pygame.Vector2()
             if event.key == pygame.K_LEFT:
@@ -307,6 +300,8 @@ class LevelEditor:
                 self.commit()
                 self.selected.x += delta.x
                 self.selected.y += delta.y
+                if self.selected.element_type == "wall":
+                    self.clip_element_to_bounds(self.selected)
 
     def mouse_down(self, event: pygame.event.Event) -> None:
         pos = pygame.Vector2(event.pos)
@@ -328,14 +323,6 @@ class LevelEditor:
             self.select_at(world)
         elif self.tool in ("wall", "obstacle"):
             self.drawing.append([world.x, world.y])
-        elif self.tool == "entry":
-            self.commit()
-            self.level.entry_x, self.level.entry_y = world.x, world.y
-            self.set_status("Entry moved.")
-        elif self.tool == "exit":
-            self.commit()
-            self.level.exit_x, self.level.exit_y = world.x, world.y
-            self.set_status("Exit moved.")
         elif self.tool in ENTITY_DEFINITIONS:
             self.place_object(self.tool, world)
 
@@ -387,9 +374,25 @@ class LevelEditor:
             return
 
         self.commit()
-        min_x = min(p[0] for p in self.drawing)
-        min_y = min(p[1] for p in self.drawing)
-        local = [[x - min_x, y - min_y] for x, y in self.drawing]
+
+        # Walls are clipped to the level rectangle before they become an element.
+        # This prevents the editor from ever writing wall geometry outside the
+        # playable bounds. The clipping is done in world coordinates so only the
+        # portion inside the cave survives.
+        world_points = [(float(x), float(y)) for x, y in self.drawing]
+        if self.tool == "wall":
+            world_points = self.clip_polygon_to_bounds(
+                world_points, self.level.width, self.level.height
+            )
+            if len(world_points) < 3 or abs(self.polygon_area(world_points)) < 1e-3:
+                self.drawing.clear()
+                self.set_status("Wall is completely outside the level bounds.", error=True)
+                logger.warning("Rejected wall: no geometry remained after bounds clipping")
+                return
+
+        min_x = min(p[0] for p in world_points)
+        min_y = min(p[1] for p in world_points)
+        local = [[x - min_x, y - min_y] for x, y in world_points]
 
         material = {}
         if self.tool == "wall":
@@ -415,6 +418,84 @@ class LevelEditor:
         self.selected = e
         self.drawing.clear()
         self.set_status(f"Created {self.tool}.")
+
+    @staticmethod
+    def polygon_area(points: list[tuple[float, float]]) -> float:
+        return 0.5 * sum(
+            points[i][0] * points[(i + 1) % len(points)][1]
+            - points[(i + 1) % len(points)][0] * points[i][1]
+            for i in range(len(points))
+        )
+
+    @staticmethod
+    def clip_polygon_to_bounds(
+        points: list[tuple[float, float]], width: float, height: float
+    ) -> list[tuple[float, float]]:
+        """Sutherland-Hodgman clip against the rectangular level bounds."""
+        def clip(poly, inside, intersect):
+            if not poly:
+                return []
+            out = []
+            previous = poly[-1]
+            previous_inside = inside(previous)
+            for current in poly:
+                current_inside = inside(current)
+                if current_inside != previous_inside:
+                    out.append(intersect(previous, current))
+                if current_inside:
+                    out.append(current)
+                previous, previous_inside = current, current_inside
+            return out
+
+        def vertical(boundary, previous, current):
+            x1, y1 = previous; x2, y2 = current
+            dx = x2 - x1
+            if abs(dx) < 1e-9:
+                return (boundary, y1)
+            t = (boundary - x1) / dx
+            return (boundary, y1 + (y2 - y1) * t)
+
+        def horizontal(boundary, previous, current):
+            x1, y1 = previous; x2, y2 = current
+            dy = y2 - y1
+            if abs(dy) < 1e-9:
+                return (x1, boundary)
+            t = (boundary - y1) / dy
+            return (x1 + (x2 - x1) * t, boundary)
+
+        poly = points
+        poly = clip(poly, lambda p: p[0] >= 0, lambda a,b: vertical(0, a,b))
+        poly = clip(poly, lambda p: p[0] <= width, lambda a,b: vertical(width, a,b))
+        poly = clip(poly, lambda p: p[1] >= 0, lambda a,b: horizontal(0, a,b))
+        poly = clip(poly, lambda p: p[1] <= height, lambda a,b: horizontal(height, a,b))
+
+        # Remove consecutive duplicates created by clipping.
+        cleaned = []
+        for point in poly:
+            if not cleaned or abs(point[0] - cleaned[-1][0]) > 1e-6 or abs(point[1] - cleaned[-1][1]) > 1e-6:
+                cleaned.append(point)
+        if len(cleaned) > 1 and abs(cleaned[0][0] - cleaned[-1][0]) < 1e-6 and abs(cleaned[0][1] - cleaned[-1][1]) < 1e-6:
+            cleaned.pop()
+        return cleaned
+
+    def clip_element_to_bounds(self, e: Element) -> None:
+        if e.element_type != "wall" or not e.points:
+            return
+        world_points = [(e.x + p[0], e.y + p[1]) for p in e.points]
+        clipped = self.clip_polygon_to_bounds(world_points, self.level.width, self.level.height)
+        if len(clipped) < 3 or abs(self.polygon_area(clipped)) < 1e-3:
+            logger.warning("Wall %s moved/rotated completely out of bounds; removing it", e.element_id)
+            self.level.elements = [item for item in self.level.elements if item.element_id != e.element_id]
+            if self.selected is e:
+                self.selected = None
+            self.set_status(f"Wall {e.element_id} left the level and was removed.", error=True)
+            return
+        min_x = min(x for x, _ in clipped)
+        min_y = min(y for _, y in clipped)
+        e.x = min_x
+        e.y = min_y
+        e.points = [[x - min_x, y - min_y] for x, y in clipped]
+        logger.debug("Clipped wall %s to level bounds", e.element_id)
 
     def select_at(self, world: pygame.Vector2) -> None:
         self.selected = None
@@ -491,6 +572,8 @@ class LevelEditor:
             cx = sum(p[0] for p in e.points) / len(e.points)
             cy = sum(p[1] for p in e.points) / len(e.points)
             e.points = [[-(y-cy)+cx, (x-cx)+cy] for x, y in e.points]
+            if e.element_type == "wall":
+                self.clip_element_to_bounds(e)
             self.set_status("Rotated polygon.")
 
     # ---------- files ----------
@@ -783,8 +866,8 @@ class LevelEditor:
             active = self.tool == tool
             pygame.draw.rect(self.screen, PANEL_2 if active else BG, button)
             pygame.draw.rect(self.screen, ACCENT if active else BORDER, button, 1)
-            label = "Select" if tool == "select" else ("Entry" if tool == "entry" else ("Exit" if tool == "exit" else ENTITY_DEFINITIONS.get(tool, {}).get("label", tool)))
-            self.text(f"{i+1 if tool not in ('select','entry','exit') else ''} {label}".strip(), (x+8,y+7), self.small, TEXT)
+            label = "Select" if tool == "select" else ENTITY_DEFINITIONS.get(tool, {}).get("label", tool)
+            self.text(f"{i+1 if tool != 'select' else ''} {label}".strip(), (x+8,y+7), self.small, TEXT)
             y += 34
 
         # File list
@@ -803,6 +886,7 @@ class LevelEditor:
 
         if not self.selected:
             self.text("Select an entity to edit it.", (r.left+12, iy+42), self.small, MUTED)
+            self.text("Entry: x=0, center     Exit: x=width, center", (r.left+12, iy+61), self.small, MUTED)
         else:
             self.text(self.selected.element_id, (r.left+12, iy+40), self.small, ACCENT)
             self.text(self.selected.element_type, (r.left+12, iy+58), self.small, MUTED)
@@ -823,6 +907,7 @@ class LevelEditor:
         self.text("FILE", (r.left+12, bottom), self.font, TEXT)
         self.text("Ctrl+S save   Ctrl+O open   Ctrl+N new", (r.left+12, bottom+24), self.small, MUTED)
         self.text("Delete selected   R rotate   F fit view", (r.left+12, bottom+44), self.small, MUTED)
+        self.text("Walls are clipped to bounds on creation", (r.left+12, bottom+60), self.small, MUTED)
 
     def draw_statusbar(self) -> None:
         y = self.screen.get_height() - STATUSBAR

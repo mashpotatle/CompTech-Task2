@@ -6,128 +6,143 @@
     "height": 768,
     "entry": {
         "position": [
-            0.485,
-            391.502
+            0.0,
+            384.0
         ],
         "direction": "right"
     },
     "exit": {
         "position": [
-            1998.0,
+            2048.0,
             384.0
         ],
         "direction": "right"
     },
     "elements": [
         {
-            "id": "wall_001",
-            "type": "wall",
+            "id": "thermal_vent_001",
+            "type": "thermal_vent",
             "position": [
-                564.652,
-                153.342
-            ],
-            "geometry": {
-                "points": [
-                    [
-                        122.984,
-                        203.022
-                    ],
-                    [
-                        0.0,
-                        0.0
-                    ],
-                    [
-                        472.416,
-                        7.809
-                    ]
-                ]
-            },
-            "material": {
-                "texture": null,
-                "mapping": {
-                    "mode": "world",
-                    "origin": [
-                        0,
-                        0
-                    ],
-                    "scale": [
-                        1.0,
-                        1.0
-                    ],
-                    "rotation": 0
-                }
-            }
-        },
-        {
-            "id": "wall_002",
-            "type": "wall",
-            "position": [
-                1259.611,
-                213.858
-            ],
-            "geometry": {
-                "points": [
-                    [
-                        0.0,
-                        265.49
-                    ],
-                    [
-                        152.266,
-                        0.0
-                    ],
-                    [
-                        398.235,
-                        97.607
-                    ]
-                ]
-            },
-            "material": {
-                "texture": null,
-                "mapping": {
-                    "mode": "world",
-                    "origin": [
-                        0,
-                        0
-                    ],
-                    "scale": [
-                        1.0,
-                        1.0
-                    ],
-                    "rotation": 0
-                }
-            }
-        },
-        {
-            "id": "fish_spawn_003",
-            "type": "fish_spawn",
-            "position": [
-                861.376,
-                370.029
+                1234.576,
+                319.825
             ],
             "properties": {
-                "count": 3
+                "heat_radius": 100.0,
+                "heat_damage": 5,
+                "eruption_damage": 20,
+                "eruption_duration": 1.0,
+                "eruption_interval": 5.0
             }
         },
         {
-            "id": "fish_spawn_004",
-            "type": "fish_spawn",
+            "id": "thermal_vent_002",
+            "type": "thermal_vent",
             "position": [
-                1304.51,
-                129.916
+                789.358,
+                373.973
             ],
             "properties": {
-                "count": 3
+                "heat_radius": 100.0,
+                "heat_damage": 5,
+                "eruption_damage": 20,
+                "eruption_duration": 1.0,
+                "eruption_interval": 5.0
             }
         },
         {
-            "id": "fish_spawn_005",
-            "type": "fish_spawn",
+            "id": "spiky_plant_001",
+            "type": "spiky_plant",
             "position": [
-                1206.904,
-                582.811
+                1017.984,
+                416.088
             ],
             "properties": {
-                "count": 3
+                "damage": 10,
+                "radius": 22.0
+            }
+        },
+        {
+            "id": "spiky_plant_002",
+            "type": "spiky_plant",
+            "position": [
+                1443.146,
+                406.06
+            ],
+            "properties": {
+                "damage": 10,
+                "radius": 22.0
+            }
+        },
+        {
+            "id": "spiky_plant_003",
+            "type": "spiky_plant",
+            "position": [
+                1477.239,
+                165.402
+            ],
+            "properties": {
+                "damage": 10,
+                "radius": 22.0
+            }
+        },
+        {
+            "id": "spiky_plant_004",
+            "type": "spiky_plant",
+            "position": [
+                1082.159,
+                127.298
+            ],
+            "properties": {
+                "damage": 10,
+                "radius": 22.0
+            }
+        },
+        {
+            "id": "spiky_plant_005",
+            "type": "spiky_plant",
+            "position": [
+                699.112,
+                333.863
+            ],
+            "properties": {
+                "damage": 10,
+                "radius": 22.0
+            }
+        },
+        {
+            "id": "spiky_plant_006",
+            "type": "spiky_plant",
+            "position": [
+                566.75,
+                444.165
+            ],
+            "properties": {
+                "damage": 10,
+                "radius": 22.0
+            }
+        },
+        {
+            "id": "spiky_plant_007",
+            "type": "spiky_plant",
+            "position": [
+                771.309,
+                482.269
+            ],
+            "properties": {
+                "damage": 10,
+                "radius": 22.0
+            }
+        },
+        {
+            "id": "spiky_plant_008",
+            "type": "spiky_plant",
+            "position": [
+                1154.356,
+                500.318
+            ],
+            "properties": {
+                "damage": 10,
+                "radius": 22.0
             }
         }
     ]

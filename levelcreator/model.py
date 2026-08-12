@@ -164,16 +164,18 @@ class Level:
     name: str = "New Cave Section"
     width: int = 2048
     height: int = 768
-    entry_x: float = 50.0
+    # Entry and exit are structural section boundaries, not editable elements.
+    entry_x: float = 0.0
     entry_y: float = 384.0
     entry_direction: str = "right"
-    exit_x: float = 1998.0
+    exit_x: float = 2048.0
     exit_y: float = 384.0
     exit_direction: str = "right"
     elements: list[Element] = field(default_factory=list)
     format_version: int = 1
 
     def to_dict(self) -> dict[str, Any]:
+        mid_y = self.height / 2
         return {
             "format_version": self.format_version,
             "id": self.level_id,
@@ -181,33 +183,33 @@ class Level:
             "width": int(self.width),
             "height": int(self.height),
             "entry": {
-                "position": [round(self.entry_x, 3), round(self.entry_y, 3)],
-                "direction": self.entry_direction,
+                "position": [0.0, round(mid_y, 3)],
+                "direction": "right",
             },
             "exit": {
-                "position": [round(self.exit_x, 3), round(self.exit_y, 3)],
-                "direction": self.exit_direction,
+                "position": [round(float(self.width), 3), round(mid_y, 3)],
+                "direction": "right",
             },
             "elements": [e.to_dict() for e in self.elements],
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Level":
-        entry = data.get("entry", {})
-        exit_data = data.get("exit", {})
-        ep = entry.get("position", [50, float(data.get("height", 768)) / 2])
-        xp = exit_data.get("position", [float(data.get("width", 2048)) - 50, float(data.get("height", 768)) / 2])
+        width = int(data.get("width", 2048))
+        height = int(data.get("height", 768))
+        # Older level files may contain movable entry/exit positions. Ignore them
+        # and migrate them to the canonical section boundaries on load.
         return cls(
             level_id=str(data.get("id", "unnamed_section")),
             name=str(data.get("name", "Cave Section")),
-            width=int(data.get("width", 2048)),
-            height=int(data.get("height", 768)),
-            entry_x=float(ep[0]),
-            entry_y=float(ep[1]),
-            entry_direction=entry.get("direction", "right"),
-            exit_x=float(xp[0]),
-            exit_y=float(xp[1]),
-            exit_direction=exit_data.get("direction", "right"),
+            width=width,
+            height=height,
+            entry_x=0.0,
+            entry_y=height / 2,
+            entry_direction="right",
+            exit_x=float(width),
+            exit_y=height / 2,
+            exit_direction="right",
             elements=[Element.from_dict(e) for e in data.get("elements", [])],
             format_version=int(data.get("format_version", 1)),
         )
@@ -227,15 +229,10 @@ class Level:
         if self.height < 512:
             errors.append("Section height must be at least 512.")
 
-        for name, x, y in (
-            ("Entry", self.entry_x, self.entry_y),
-            ("Exit", self.exit_x, self.exit_y),
-        ):
-            if not (0 <= x <= self.width and 0 <= y <= self.height):
-                errors.append(f"{name} point is outside the section.")
-
-        if ((self.entry_x - self.exit_x) ** 2 + (self.entry_y - self.exit_y) ** 2) ** 0.5 < 256:
-            errors.append("Entry and exit points are too close together.")
+        if self.entry_x != 0 or self.entry_y != self.height / 2:
+            errors.append("Entry is not at the fixed left section boundary.")
+        if self.exit_x != self.width or self.exit_y != self.height / 2:
+            errors.append("Exit is not at the fixed right section boundary.")
 
         for label, direction in (
             ("Entry", self.entry_direction),
