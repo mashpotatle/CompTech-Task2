@@ -21,6 +21,7 @@ from systems.collision import CollisionSystem
 from systems.camera import Camera
 from ui.menus import EndlessRunConfirmation, MainMenu, PauseMenu
 from entities.fish import Fish
+from entities.spiky_plant import SpikyPlant
 
 from settings import (
     DEBUG_COLLISION,
@@ -186,6 +187,14 @@ class Game:
         self.fish = pygame.sprite.Group()
 
         self.spawn_fish_from_level()
+
+        # ----------------------------------------------------------
+        # Spiky Plants
+        # ----------------------------------------------------------
+
+        self.spiky_plants = pygame.sprite.Group()
+
+        self.spawn_spiky_plants_from_level()
 
         # ----------------------------------------------------------
         # Collision system
@@ -452,6 +461,10 @@ class Game:
         self.cave_section = next_instance.section
 
         self.update_collision_geometry()
+
+        self.spawn_fish_from_level()
+        self.spawn_spiky_plants_from_level()
+
         self.update_camera()
         
     # ==================================================================
@@ -565,6 +578,16 @@ class Game:
 
             for fish in self.fish:
                 fish.draw(
+                    self.screen,
+                    self.camera,
+                )
+
+            # ------------------------------------------------------
+            # Draw spiky plants
+            # ------------------------------------------------------
+
+            for plant in self.spiky_plants:
+                plant.draw(
                     self.screen,
                     self.camera,
                 )
@@ -898,6 +921,32 @@ class Game:
 
                 self.fish.add(fish)
 
+    def spawn_spiky_plants_from_level(self):
+        """
+        Create all spiky plants from the loaded level.
+        """
+
+        self.spiky_plants.empty()
+
+        elements = self.level_manager.get_all_elements()
+
+        for element in elements:
+
+            if element.element_type != "spiky_plant":
+                continue
+
+            properties = element.properties
+
+            plant = SpikyPlant(
+                position=element.position,
+                plant_id=element.element_id,
+                damage=properties.get("damage", 15),
+                radius=properties.get("radius", 24),
+            )
+
+            self.spiky_plants.add(plant)
+
+
     def handle_fish_damage(
         self,
         fish: Fish,
@@ -912,6 +961,19 @@ class Game:
         print(
             f"Fish {fish.spawn_id} hit the player "
             f"for {fish.damage} damage."
+        )
+
+    def handle_spiky_plant_damage(
+        self,
+        plant: SpikyPlant,
+    ) -> None:
+        """
+        Temporary damage handler.
+        """
+
+        print(
+            f"Plant {plant.plant_id} hit player "
+            f"for {plant.damage} damage."
         )
 
     # ==================================================================

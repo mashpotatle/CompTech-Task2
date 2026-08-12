@@ -20,41 +20,222 @@
     },
     "elements": [
         {
-            "id": "thermal_vent_001",
-            "type": "thermal_vent",
+            "id": "wall_001",
+            "type": "wall",
             "position": [
-                1234.576,
-                319.825
+                0,
+                0
             ],
-            "properties": {
-                "heat_radius": 100.0,
-                "heat_damage": 5,
-                "eruption_damage": 20,
-                "eruption_duration": 1.0,
-                "eruption_interval": 5.0
+            "geometry": {
+                "points": [
+                    [
+                        0,
+                        103.009
+                    ],
+                    [
+                        1342.872,
+                        267.682
+                    ],
+                    [
+                        585.879,
+                        0
+                    ],
+                    [
+                        123.784,
+                        0
+                    ],
+                    [
+                        0,
+                        79.409
+                    ]
+                ]
+            },
+            "material": {
+                "texture": null,
+                "mapping": {
+                    "mode": "world",
+                    "origin": [
+                        0,
+                        0
+                    ],
+                    "scale": [
+                        1.0,
+                        1.0
+                    ],
+                    "rotation": 0
+                }
             }
         },
         {
-            "id": "thermal_vent_002",
-            "type": "thermal_vent",
+            "id": "wall_002",
+            "type": "wall",
             "position": [
-                789.358,
-                373.973
+                1511.331,
+                0
             ],
-            "properties": {
-                "heat_radius": 100.0,
-                "heat_damage": 5,
-                "eruption_damage": 20,
-                "eruption_duration": 1.0,
-                "eruption_interval": 5.0
+            "geometry": {
+                "points": [
+                    [
+                        0.0,
+                        0
+                    ],
+                    [
+                        146.402,
+                        377.984
+                    ],
+                    [
+                        341.847,
+                        0
+                    ]
+                ]
+            },
+            "material": {
+                "texture": null,
+                "mapping": {
+                    "mode": "world",
+                    "origin": [
+                        0,
+                        0
+                    ],
+                    "scale": [
+                        1.0,
+                        1.0
+                    ],
+                    "rotation": 0
+                }
+            }
+        },
+        {
+            "id": "wall_003",
+            "type": "wall",
+            "position": [
+                1541.116,
+                412.077
+            ],
+            "geometry": {
+                "points": [
+                    [
+                        0.0,
+                        355.923
+                    ],
+                    [
+                        281.066,
+                        0.0
+                    ],
+                    [
+                        439.731,
+                        355.923
+                    ]
+                ]
+            },
+            "material": {
+                "texture": null,
+                "mapping": {
+                    "mode": "world",
+                    "origin": [
+                        0,
+                        0
+                    ],
+                    "scale": [
+                        1.0,
+                        1.0
+                    ],
+                    "rotation": 0
+                }
+            }
+        },
+        {
+            "id": "wall_004",
+            "type": "wall",
+            "position": [
+                1895.5,
+                0
+            ],
+            "geometry": {
+                "points": [
+                    [
+                        152.5,
+                        0
+                    ],
+                    [
+                        0.0,
+                        0
+                    ],
+                    [
+                        152.5,
+                        126.74
+                    ]
+                ]
+            },
+            "material": {
+                "texture": null,
+                "mapping": {
+                    "mode": "world",
+                    "origin": [
+                        0,
+                        0
+                    ],
+                    "scale": [
+                        1.0,
+                        1.0
+                    ],
+                    "rotation": 0
+                }
+            }
+        },
+        {
+            "id": "wall_005",
+            "type": "wall",
+            "position": [
+                1804.133,
+                265.676
+            ],
+            "geometry": {
+                "points": [
+                    [
+                        237.336,
+                        502.324
+                    ],
+                    [
+                        243.867,
+                        462.569
+                    ],
+                    [
+                        243.867,
+                        256.419
+                    ],
+                    [
+                        0.0,
+                        0.0
+                    ],
+                    [
+                        200.574,
+                        502.324
+                    ]
+                ]
+            },
+            "material": {
+                "texture": null,
+                "mapping": {
+                    "mode": "world",
+                    "origin": [
+                        0,
+                        0
+                    ],
+                    "scale": [
+                        1.0,
+                        1.0
+                    ],
+                    "rotation": 0
+                }
             }
         },
         {
             "id": "spiky_plant_001",
             "type": "spiky_plant",
             "position": [
-                1017.984,
-                416.088
+                1846.248,
+                289.742
             ],
             "properties": {
                 "damage": 10,
@@ -65,8 +246,8 @@
             "id": "spiky_plant_002",
             "type": "spiky_plant",
             "position": [
-                1443.146,
-                406.06
+                1749.985,
+                201.501
             ],
             "properties": {
                 "damage": 10,
@@ -77,8 +258,8 @@
             "id": "spiky_plant_003",
             "type": "spiky_plant",
             "position": [
-                1477.239,
-                165.402
+                1802.128,
+                420.099
             ],
             "properties": {
                 "damage": 10,
@@ -89,8 +270,8 @@
             "id": "spiky_plant_004",
             "type": "spiky_plant",
             "position": [
-                1082.159,
-                127.298
+                1976.605,
+                73.15
             ],
             "properties": {
                 "damage": 10,
@@ -101,48 +282,12 @@
             "id": "spiky_plant_005",
             "type": "spiky_plant",
             "position": [
-                699.112,
-                333.863
+                1816.166,
+                93.205
             ],
             "properties": {
                 "damage": 10,
-                "radius": 22.0
-            }
-        },
-        {
-            "id": "spiky_plant_006",
-            "type": "spiky_plant",
-            "position": [
-                566.75,
-                444.165
-            ],
-            "properties": {
-                "damage": 10,
-                "radius": 22.0
-            }
-        },
-        {
-            "id": "spiky_plant_007",
-            "type": "spiky_plant",
-            "position": [
-                771.309,
-                482.269
-            ],
-            "properties": {
-                "damage": 10,
-                "radius": 22.0
-            }
-        },
-        {
-            "id": "spiky_plant_008",
-            "type": "spiky_plant",
-            "position": [
-                1154.356,
-                500.318
-            ],
-            "properties": {
-                "damage": 10,
-                "radius": 22.0
+                "radius": 67.0
             }
         }
     ]
