@@ -411,8 +411,8 @@ class Game:
 
             current.update(delta_time)
 
-            # Apply any movement the current imposes on the player.
-            movement = current.apply_to_player(self.player, delta_time)
+            # Apply any movement the current imposes on the player, with collision checks.
+            movement = current.apply_to_player(self.player, delta_time, self.collision_system)
 
             # If movement occurred, trigger a visual wobble effect on the player
             # proportional to the force magnitude.

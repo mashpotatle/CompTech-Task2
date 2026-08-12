@@ -30,7 +30,7 @@ GREEN = (85, 205, 120)
 GRID = (34, 47, 56)
 GRID_MAJOR = (47, 61, 71)
 
-DATA_DIR = Path(__file__).resolve().parent / "levels"
+DATA_DIR = (Path(__file__).resolve().parents[1] / "TheTwilightZone" / "data" / "cave_sections").resolve()
 LOG_DIR = Path(__file__).resolve().parent / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOG_DIR / "level_creator.log"

@@ -21,13 +21,12 @@ class Current(pygame.sprite.Sprite):
         position: World-space centre of the current.
         direction: Direction in which the water flows. It is normalised.
         current_id: Optional level-data identifier.
-        strength: Maximum push speed/force applied at the centre.
-        effect_radius: Radius of the current's influence in world pixels.
+        strength: Push speed/force applied uniformly throughout the current.
+        effect_radius: Half-width/half-height of the square current's influence area in world pixels.
 
-    ``strength`` is treated as pixels-per-second when used through
-    :meth:`apply_to_player`.  ``get_force_at_position`` retains the force
-    vector API used by the original placeholder, making the entity easy to
-    integrate with other movement systems.
+    The current applies uniform force (no falloff) to any position within
+    its square influence area. ``strength`` is treated as pixels-per-second
+    when used through :meth:`apply_to_player`.
     """
 
     def __init__(
@@ -72,31 +71,32 @@ class Current(pygame.sprite.Sprite):
     def get_force_at_position(self, position: pygame.Vector2) -> pygame.Vector2:
         """Return the current's push vector at ``position``.
 
-        The push is strongest at the centre and smoothly falls to zero at
-        ``effect_radius``. Positions outside the current receive no force.
+        Returns uniform push force if the position is within the square
+        influence area, otherwise returns zero force.
         """
 
         if self.effect_radius <= 0:
             return pygame.Vector2()
 
         offset = pygame.Vector2(position) - self.position
-        distance = offset.length()
 
-        if distance >= self.effect_radius:
+        # Check if position is within the square bounds (using absolute distance on each axis)
+        if abs(offset.x) > self.effect_radius or abs(offset.y) > self.effect_radius:
             return pygame.Vector2()
 
-        # Smooth falloff avoids an abrupt speed change at the edge.
-        ratio = 1.0 - (distance / self.effect_radius)
-        ratio = ratio * ratio * (3.0 - 2.0 * ratio)
+        # Uniform push force throughout the current
+        return self.direction * self.strength
 
-        return self.direction * (self.strength * ratio)
-
-    def apply_to_player(self, player, delta_time: float) -> pygame.Vector2:
+    def apply_to_player(self, player, delta_time: float, collision_system=None) -> pygame.Vector2:
         """Apply this current to a player and return the applied movement.
 
         The method accepts the existing Player object used by the project.
         It updates ``player.position`` and ``player.rect`` when the player is
         inside the current.  A zero/negative delta time is ignored.
+        
+        If collision_system is provided, collision checks are performed and
+        movement is blocked if it would cause the player to intersect with
+        solid level geometry (walls/obstacles).
         """
 
         if delta_time <= 0:
@@ -108,21 +108,47 @@ class Current(pygame.sprite.Sprite):
         if movement.length_squared() == 0:
             return movement
 
-        player.position += movement
-        if hasattr(player, "rect"):
-            player.rect.center = (
-                round(player.position.x),
-                round(player.position.y),
-            )
+        # If collision system is available, check for collisions before applying movement
+        if collision_system is not None:
+            # Apply movement horizontally
+            player.position.x += movement.x
+            if hasattr(player, "rect"):
+                player.rect.centerx = round(player.position.x)
+
+            # Check for collision and revert if necessary
+            if collision_system.check_collision(player.rect):
+                player.position.x -= movement.x
+                if hasattr(player, "rect"):
+                    player.rect.centerx = round(player.position.x)
+
+            # Apply movement vertically
+            player.position.y += movement.y
+            if hasattr(player, "rect"):
+                player.rect.centery = round(player.position.y)
+
+            # Check for collision and revert if necessary
+            if collision_system.check_collision(player.rect):
+                player.position.y -= movement.y
+                if hasattr(player, "rect"):
+                    player.rect.centery = round(player.position.y)
+        else:
+            # Fallback to simple movement if no collision system provided
+            player.position += movement
+            if hasattr(player, "rect"):
+                player.rect.center = (
+                    round(player.position.x),
+                    round(player.position.y),
+                )
 
         return movement
 
     def affects_position(self, position: pygame.Vector2) -> bool:
-        """Return whether ``position`` is inside the current's influence."""
+        """Return whether ``position`` is inside the current's square influence area."""
 
         if self.effect_radius <= 0:
             return False
-        return self.position.distance_to(position) < self.effect_radius
+        offset = pygame.Vector2(position) - self.position
+        return abs(offset.x) <= self.effect_radius and abs(offset.y) <= self.effect_radius
 
     # ------------------------------------------------------------------
     # Entity update / rendering
@@ -149,26 +175,31 @@ class Current(pygame.sprite.Sprite):
             return
 
         centre = pygame.Vector2(self.image.get_width() / 2, self.image.get_height() / 2)
-        radius = max(1, int(self.effect_radius))
+        half_size = max(1, int(self.effect_radius))
 
-        pygame.draw.circle(
+        # Draw square bounds
+        rect = pygame.Rect(
+            round(centre.x - half_size),
+            round(centre.y - half_size),
+            half_size * 2,
+            half_size * 2
+        )
+        pygame.draw.rect(
             self.image,
             (60, 140, 220, 55),
-            (round(centre.x), round(centre.y)),
-            radius,
+            rect,
         )
-        pygame.draw.circle(
+        pygame.draw.rect(
             self.image,
             (100, 190, 245, 130),
-            (round(centre.x), round(centre.y)),
-            radius,
+            rect,
             2,
         )
 
         # Three arrows communicate the flow direction. Their phase changes
         # over time so the current is visibly active rather than a dead blob.
         perpendicular = pygame.Vector2(-self.direction.y, self.direction.x)
-        base_distance = radius * 0.45
+        radius = half_size
         arrow_length = max(8.0, radius * 0.35)
         phase_offset = (self._animation_time - 0.5) * radius * 0.5
 
