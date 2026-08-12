@@ -9,8 +9,9 @@ __pycache__/
 # that fucking zip that i hate
 *.zip
 
-# Distribution / packaging
+# logs and levels
 levelcreator/logs
+TheTwilightZone/data/cave_sections/*
 
 # Distribution / packaging
 .Python

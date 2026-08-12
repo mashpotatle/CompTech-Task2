@@ -10,6 +10,7 @@ import pygame
 
 from settings import SCREEN_HEIGHT, SCREEN_WIDTH, PLAYER_WIDTH, PLAYER_HEIGHT
 from systems.collision import CollisionSystem
+import math
 
 class Player:
     """
@@ -56,6 +57,14 @@ class Player:
             round(self.position.x),
             round(self.position.y)
         )
+
+        # Health (temporary). A simple integer health pool for
+        # environmental damage and entity attacks.
+        self.health = 100
+        # Wobble visual state applied when inside a current.
+        self.wobble_strength = 0.0
+        self.wobble_timer = 0.0
+        self._wobble_time = 0.0
 
     def handle_input(self):
         """
@@ -135,6 +144,14 @@ class Player:
             self.position.y -= movement.y
             self.rect.centery = round(self.position.y)
 
+        # Update wobble visual timer
+        if delta_time is not None and delta_time > 0:
+            self._wobble_time += delta_time
+            if self.wobble_timer > 0:
+                self.wobble_timer = max(0.0, self.wobble_timer - delta_time)
+                if self.wobble_timer == 0.0:
+                    self.wobble_strength = 0.0
+
         # ---------------------------------------------------------------
         # Horizontal Movement
         # ---------------------------------------------------------------
@@ -210,9 +227,16 @@ class Player:
         )
 
         # Centre the visual representation on the player's screen position.
+        wobble_offset_x = 0.0
+        wobble_offset_y = 0.0
+
+        if self.wobble_strength > 0.0:
+            wobble_offset_x = math.sin(self._wobble_time * 18.0) * (self.wobble_strength * 6.0)
+            wobble_offset_y = math.sin(self._wobble_time * 24.0) * (self.wobble_strength * 3.0)
+
         screen_rect.center = (
-            round(screen_position.x),
-            round(screen_position.y),
+            round(screen_position.x + wobble_offset_x),
+            round(screen_position.y + wobble_offset_y),
         )
 
         # Temporary player representation.
@@ -221,3 +245,29 @@ class Player:
             (40, 180, 220),
             screen_rect,
         )
+
+    def apply_damage(self, amount: int) -> None:
+        """Reduce player health by `amount` and clamp at zero."""
+
+        try:
+            damage = int(amount)
+        except Exception:
+            return
+
+        self.health = max(0, self.health - damage)
+
+    def add_wobble(self, strength: float, duration: float) -> None:
+        """Increase wobble visual effect with given `strength` and `duration`.
+
+        Strength is a small scalar (e.g. 0.0-2.0). Duration is seconds.
+        """
+
+        try:
+            s = float(strength)
+            d = float(duration)
+        except Exception:
+            return
+
+        # Keep the strongest recent wobble and the longest duration
+        self.wobble_strength = max(self.wobble_strength, s)
+        self.wobble_timer = max(self.wobble_timer, d)

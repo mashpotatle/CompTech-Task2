@@ -22,6 +22,7 @@ from systems.camera import Camera
 from ui.menus import EndlessRunConfirmation, MainMenu, PauseMenu
 from entities.fish import Fish
 from entities.spiky_plant import SpikyPlant
+from entities.current import Current
 
 from settings import (
     DEBUG_COLLISION,
@@ -195,6 +196,14 @@ class Game:
         self.spiky_plants = pygame.sprite.Group()
 
         self.spawn_spiky_plants_from_level()
+
+        # ----------------------------------------------------------
+        # Currents
+        # ----------------------------------------------------------
+
+        self.currents = pygame.sprite.Group()
+
+        self.spawn_currents_from_level()
 
         # ----------------------------------------------------------
         # Collision system
@@ -384,6 +393,36 @@ class Game:
                 self.handle_fish_damage(fish)
 
         # ----------------------------------------------------------
+        # Spiky plants
+        # ----------------------------------------------------------
+
+        for plant in self.spiky_plants:
+
+            plant.update(delta_time)
+
+            if plant.check_player_collision(self.player.rect):
+                self.handle_spiky_plant_damage(plant)
+
+        # ----------------------------------------------------------
+        # Currents
+        # ----------------------------------------------------------
+
+        for current in self.currents:
+
+            current.update(delta_time)
+
+            # Apply any movement the current imposes on the player.
+            movement = current.apply_to_player(self.player, delta_time)
+
+            # If movement occurred, trigger a visual wobble effect on the player
+            # proportional to the force magnitude.
+            if movement.length_squared() > 0:
+                # Approximate force magnitude (pixels / s) from movement and dt
+                force_mag = movement.length() / max(delta_time, 1e-6)
+                wobble_strength = min(2.0, force_mag / 100.0)
+                self.player.add_wobble(wobble_strength, 0.5)
+
+        # ----------------------------------------------------------
         # Active section
         # ----------------------------------------------------------
 
@@ -464,6 +503,7 @@ class Game:
 
         self.spawn_fish_from_level()
         self.spawn_spiky_plants_from_level()
+        self.spawn_currents_from_level()
 
         self.update_camera()
         
@@ -571,6 +611,16 @@ class Game:
             # ------------------------------------------------------
 
             self.draw_level()
+
+            # ------------------------------------------------------
+            # Draw currents
+            # ------------------------------------------------------
+
+            for current in self.currents:
+                current.draw(
+                    self.screen,
+                    self.camera,
+                )
 
             # ------------------------------------------------------
             # Draw fish
@@ -947,6 +997,42 @@ class Game:
             self.spiky_plants.add(plant)
 
 
+    def spawn_currents_from_level(self):
+        """
+        Create current entities from the loaded level.
+        """
+
+        self.currents.empty()
+
+        elements = self.level_manager.get_all_elements()
+
+        for element in elements:
+
+            if element.element_type != "current":
+                continue
+
+            properties = element.properties
+
+            # Map level JSON "width"/"height" into an effect radius.
+            width = float(properties.get("width", 0.0))
+            height = float(properties.get("height", 0.0))
+            radius = max(width, height) / 2.0 if (width or height) else properties.get("effect_radius", 60.0)
+
+            strength = float(properties.get("strength", 100.0))
+
+            direction = properties.get("direction", [1.0, 0.0])
+
+            current = Current(
+                position=element.position,
+                direction=direction,
+                current_id=element.element_id,
+                strength=strength,
+                effect_radius=radius,
+            )
+
+            self.currents.add(current)
+
+
     def handle_fish_damage(
         self,
         fish: Fish,
@@ -963,6 +1049,14 @@ class Game:
             f"for {fish.damage} damage."
         )
 
+        # Apply damage to player health
+        if hasattr(self.player, "apply_damage"):
+            self.player.apply_damage(fish.damage)
+
+        if getattr(self.player, "health", 1) <= 0:
+            print("Player died from fish damage.")
+            self.game_state = GameState.DEAD
+
     def handle_spiky_plant_damage(
         self,
         plant: SpikyPlant,
@@ -975,6 +1069,14 @@ class Game:
             f"Plant {plant.plant_id} hit player "
             f"for {plant.damage} damage."
         )
+
+        # Apply damage to player health
+        if hasattr(self.player, "apply_damage"):
+            self.player.apply_damage(plant.damage)
+
+        if getattr(self.player, "health", 1) <= 0:
+            print("Player died from plant damage.")
+            self.game_state = GameState.DEAD
 
     # ==================================================================
     # MAIN LOOP

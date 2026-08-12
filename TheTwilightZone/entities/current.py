@@ -203,6 +203,35 @@ class Current(pygame.sprite.Sprite):
                 ],
             )
 
+        # ------------------------------------------------------------------
+        # Bubbles stream
+        # Draw a small stream of bubbles that travel along the flow
+        # direction. Their phase is driven by _animation_time so they
+        # appear to move through the current.
+        # ------------------------------------------------------------------
+
+        bubble_count = max(4, int(radius // 6))
+        for i in range(bubble_count):
+            t = (self._animation_time + i * 0.12) % 1.0
+
+            # Bubble position moves from the centre backwards along the
+            # current direction. t==0 is near the centre, t==1 at the edge.
+            bubble_pos = centre - self.direction * (t * radius * 0.9)
+
+            # Small lateral wobble so bubbles aren't perfectly centred.
+            lateral = perpendicular * (math.sin((t + i) * math.tau) * (radius * 0.06))
+            bubble_pos += lateral
+
+            alpha = int(220 * (1.0 - t))
+            bubble_radius = max(1, int(max(1, radius * 0.04) * (1.0 - t)))
+
+            pygame.draw.circle(
+                self.image,
+                (200, 230, 255, alpha),
+                (round(bubble_pos.x), round(bubble_pos.y)),
+                bubble_radius,
+            )
+
     def draw(self, screen: pygame.Surface, camera=None) -> None:
         """Draw the current using the game's world-to-screen camera API."""
 
