@@ -64,7 +64,10 @@ class LevelEditor:
         self.camera = pygame.Vector2(0, 0)
         self.zoom = 0.85
         self.dragging = False
+        self.dragging_element = False
         self.last_mouse = pygame.Vector2()
+        self.drag_origin_world = pygame.Vector2()
+        self.drag_origin_element = pygame.Vector2()
         self.running = True
 
         self.status = "Ready"
@@ -320,6 +323,9 @@ class LevelEditor:
 
         world = self.screen_to_world(pos)
         if self.tool == "select":
+            if self.selected and self.contains(self.selected, world):
+                self.begin_drag_selected(pos, world)
+                return
             self.select_at(world)
         elif self.tool in ("wall", "obstacle"):
             self.drawing.append([world.x, world.y])
@@ -329,15 +335,44 @@ class LevelEditor:
     def mouse_up(self, event: pygame.event.Event) -> None:
         if event.button == 2:
             self.dragging = False
+        elif event.button == 1 and self.dragging_element:
+            self.finish_drag_selected()
         elif event.button == 3 and self.tool in ("wall", "obstacle"):
             self.finish_polygon()
 
     def mouse_motion(self, event: pygame.event.Event) -> None:
+        if self.dragging_element and self.selected:
+            self.move_dragged_element(pygame.Vector2(event.pos))
+            return
         if not self.dragging:
             return
         pos = pygame.Vector2(event.pos)
         self.camera -= (pos - self.last_mouse) / self.zoom
         self.last_mouse = pos
+
+    def begin_drag_selected(self, mouse_pos: pygame.Vector2, world_pos: pygame.Vector2 | None = None) -> None:
+        if not self.selected:
+            return
+        self.commit()
+        self.dragging_element = True
+        self.drag_origin_world = world_pos if world_pos is not None else self.screen_to_world(mouse_pos)
+        self.drag_origin_element = pygame.Vector2(self.selected.x, self.selected.y)
+        self.set_status(f"Dragging {self.selected.element_id}.")
+
+    def move_dragged_element(self, mouse_pos: pygame.Vector2) -> None:
+        if not self.selected or not self.dragging_element:
+            return
+        world = self.screen_to_world(mouse_pos)
+        delta = world - self.drag_origin_world
+        self.selected.x = self.drag_origin_element.x + delta.x
+        self.selected.y = self.drag_origin_element.y + delta.y
+        if self.selected.element_type == "wall":
+            self.clip_element_to_bounds(self.selected)
+
+    def finish_drag_selected(self) -> None:
+        self.dragging_element = False
+        if self.selected:
+            self.set_status(f"Moved {self.selected.element_id}.")
 
     # ---------- editing ----------
 
