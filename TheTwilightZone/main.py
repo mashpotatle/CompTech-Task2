@@ -9,7 +9,7 @@ from game.game import Game
 
 
 def main():
-    """Create and run the game."""
+    """Create and run the game.""" 
 
     game = Game()
     game.run()

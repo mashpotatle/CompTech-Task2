@@ -1,6 +1,7 @@
 import pygame
 
 from settings import SETTINGS
+from ui.layout import load_layout
 
 
 class UIButton:
@@ -53,26 +54,34 @@ class MainMenu:
         self.max_distance = SETTINGS.max_distance_travelled
         self.color_blind_enabled = SETTINGS.color_blind_mode
 
+        # Rects/text are authored visually with the uicreator tool and saved
+        # to data/ui/main_menu.json; the hardcoded rects below are only a
+        # fallback in case that file is missing.
+        self.layout = load_layout("main_menu")
+
+        play_rect = self.layout.rect("btn_play", pygame.Rect(120, 220, 220, 54))
         self.btn_play = UIButton(
-            120,
-            220,
-            220,
-            54,
-            "-> Play",
+            play_rect.x,
+            play_rect.y,
+            play_rect.width,
+            play_rect.height,
+            self.layout.get("btn_play", "text", "-> Play"),
             self.font_large,
             self.btn_color,
             self.btn_hover,
         )
+        exit_rect = self.layout.rect("btn_exit", pygame.Rect(120, 300, 220, 54))
         self.btn_exit = UIButton(
-            120,
-            300,
-            220,
-            54,
-            "X Exit Game",
+            exit_rect.x,
+            exit_rect.y,
+            exit_rect.width,
+            exit_rect.height,
+            self.layout.get("btn_exit", "text", "X Exit Game"),
             self.font_large,
             self.btn_color,
             (200, 50, 50),
         )
+        self.panel_rect = self.layout.rect("panel_settings", pygame.Rect(self.width - 280, 180, 220, 260))
 
     def handle_events(self, event, mouse_pos):
         self.btn_play.check_hover(mouse_pos)
@@ -84,7 +93,7 @@ class MainMenu:
             if self.btn_exit.handle_event(event):
                 return "EXIT"
 
-            toggle_rect = pygame.Rect(self.width - 280 + 20, 180 + 70, 24, 24)
+            toggle_rect = pygame.Rect(self.panel_rect.x + 20, self.panel_rect.y + 70, 24, 24)
             if toggle_rect.collidepoint(event.pos):
                 SETTINGS.color_blind_mode = not SETTINGS.color_blind_mode
                 self.color_blind_enabled = SETTINGS.color_blind_mode
@@ -115,11 +124,13 @@ class MainMenu:
         self.btn_play.draw(surface)
         self.btn_exit.draw(surface)
 
-        panel_rect = pygame.Rect(self.width - 280, 180, 220, 260)
+        panel_rect = self.panel_rect
         pygame.draw.rect(surface, self.panel_color, panel_rect, border_radius=10)
         pygame.draw.rect(surface, (255, 255, 255), panel_rect, 2, border_radius=10)
 
-        panel_title = self.font_medium.render("Settings", True, self.text_color)
+        panel_title = self.font_medium.render(
+            self.layout.get("panel_settings", "text", "Settings"), True, self.text_color
+        )
         surface.blit(panel_title, (panel_rect.x + 20, panel_rect.y + 18))
 
         toggle_rect = pygame.Rect(panel_rect.x + 20, panel_rect.y + 70, 24, 24)
@@ -136,11 +147,12 @@ class MainMenu:
         self._draw_volume_slider(surface, panel_rect.x + 25, panel_rect.y + 265, "Game", SETTINGS.game_volume)
 
     def _handle_slider_click(self, pos):
+        panel_rect = self.panel_rect
         slider_positions = [
-            (self.width - 280 + 25, 180 + 130),
-            (self.width - 280 + 25, 180 + 175),
-            (self.width - 280 + 25, 180 + 220),
-            (self.width - 280 + 25, 180 + 265),
+            (panel_rect.x + 25, panel_rect.y + 130),
+            (panel_rect.x + 25, panel_rect.y + 175),
+            (panel_rect.x + 25, panel_rect.y + 220),
+            (panel_rect.x + 25, panel_rect.y + 265),
         ]
 
         for index, (x, y) in enumerate(slider_positions):

@@ -20,6 +20,9 @@ from levels.cave_section import LevelElement
 from systems.collision import CollisionSystem
 from systems.camera import Camera
 from ui.menus import EndlessRunConfirmation, MainMenu, PauseMenu
+from ui.hud import HUD
+from ui.hotbar import Hotbar
+from ui.death_screen import DeathScreen
 from entities.fish import Fish
 from entities.spiky_plant import SpikyPlant
 from entities.current import Current
@@ -30,6 +33,7 @@ from settings import (
     DEBUG_PLAYER_COLLISION,
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
+    SETTINGS,
     TARGET_FPS,
     WINDOW_TITLE,
 )
@@ -105,6 +109,20 @@ class Game:
         )
         self.showing_endless_confirmation = False
 
+        self.hud = HUD()
+        self.hotbar = Hotbar()
+        self.death_screen = DeathScreen(
+            SCREEN_WIDTH,
+            SCREEN_HEIGHT,
+        )
+
+        # Set by damage handlers so the death screen can report why the
+        # player died. Oxygen tracking is not implemented yet, so the O2
+        # meter is a placeholder until systems/oxygen.py exists.
+        self.cause_of_death = "Unknown"
+        self.distance_travelled = 0.0
+        self.oxygen_percent = 100.0
+
         # Controls whether the main game loop continues running.
         self.running = True
 
@@ -126,11 +144,29 @@ class Game:
             .parent
         )
 
-        level_data_directory = (
+        self.level_data_directory = (
             project_root
             / "data"
             / "cave_sections"
             )
+
+        # ----------------------------------------------------------
+        # Camera
+        # ----------------------------------------------------------
+
+        self.camera = Camera(
+            SCREEN_WIDTH,
+            SCREEN_HEIGHT,
+        )
+
+        self._start_new_run()
+
+    def _start_new_run(self):
+        """
+        (Re)create the level, player, and entities for a fresh run.
+
+        Used both by __init__ and by the death screen's restart action.
+        """
 
         # ----------------------------------------------------------
         # Level manager
@@ -146,13 +182,13 @@ class Game:
         available_sections = [
             path.name
             for path in sorted(
-                level_data_directory.glob("*.json")
+                self.level_data_directory.glob("*.json")
             )
             if path.is_file()
         ]
 
         self.level_manager = LevelManager(
-            level_data_directory,
+            self.level_data_directory,
             available_sections=available_sections,
         )
 
@@ -180,6 +216,9 @@ class Game:
         self.player = Player(
             self.cave_section.entry_position.copy()
         )
+        self._run_start_x = self.player.position.x
+        self.distance_travelled = 0.0
+        self.cause_of_death = "Unknown"
 
         # ----------------------------------------------------------
         # Fish
@@ -216,17 +255,8 @@ class Game:
         # elements that contain solid geometry.
         self.update_collision_geometry()
 
-        # ----------------------------------------------------------
-        # Camera
-        # ----------------------------------------------------------
-
-        self.camera = Camera(
-            SCREEN_WIDTH,
-            SCREEN_HEIGHT,
-        )
-
-        # Update the camera once during initialisation so that the
-        # player begins at the correct position.
+        # Update the camera once so the player begins at the correct
+        # position.
         self.update_camera()
 
     # ==================================================================
@@ -286,6 +316,14 @@ class Game:
                 elif action == "QUIT_TO_MENU":
                     self.game_state = GameState.MAIN_MENU
                     self.pause_menu.confirming_quit = False
+
+            if self.game_state == GameState.DEAD:
+                action = self.death_screen.handle_events(event, mouse_pos)
+                if action == "RESTART":
+                    self._start_new_run()
+                    self.game_state = GameState.PLAYING
+                elif action == "MAIN_MENU":
+                    self.game_state = GameState.MAIN_MENU
 
     # ==================================================================
     # GAME UPDATE
@@ -429,7 +467,6 @@ class Game:
         self.level_manager.update_active_section(
             self.player.position
         )
-
         self.current_section_instance = (
             self.level_manager.get_current_section()
         )
@@ -444,6 +481,17 @@ class Game:
         # ----------------------------------------------------------
 
         self.check_section_exit()
+
+        # ----------------------------------------------------------
+        # Distance travelled
+        # ----------------------------------------------------------
+
+        # Placeholder "metres" until a real distance/unit system exists;
+        # tracks horizontal displacement from the run's starting point.
+        self.distance_travelled = max(
+            self.distance_travelled,
+            abs(self.player.position.x - self._run_start_x),
+        )
 
         # ----------------------------------------------------------
         # Camera
@@ -584,7 +632,15 @@ class Game:
         Update the death screen.
         """
 
-        pass
+        is_new_high_score = self.distance_travelled > SETTINGS.max_distance_travelled
+        if is_new_high_score:
+            SETTINGS.max_distance_travelled = int(self.distance_travelled)
+
+        self.death_screen.set_result(
+            self.distance_travelled,
+            self.cause_of_death,
+            is_new_high_score,
+        )
 
     # ==================================================================
     # RENDERING
@@ -696,10 +752,19 @@ class Game:
                     1,
                 )
 
+            # ------------------------------------------------------
+            # Draw HUD and hotbar
+            # ------------------------------------------------------
+
+            self.hud.draw(self.screen, self.player.health, self.oxygen_percent)
+            self.hotbar.draw(self.screen, [], active_index=0)
+
         if self.game_state == GameState.PAUSED:
             self.pause_menu.draw(self.screen)
         elif self.game_state == GameState.MAIN_MENU:
             self.main_menu.draw(self.screen)
+        elif self.game_state == GameState.DEAD:
+            self.death_screen.draw(self.screen)
 
         if self.showing_endless_confirmation:
             self.endless_run_confirmation.draw(self.screen)
@@ -1055,6 +1120,7 @@ class Game:
 
         if getattr(self.player, "health", 1) <= 0:
             print("Player died from fish damage.")
+            self.cause_of_death = "Eaten by a fish"
             self.game_state = GameState.DEAD
 
     def handle_spiky_plant_damage(
@@ -1076,6 +1142,7 @@ class Game:
 
         if getattr(self.player, "health", 1) <= 0:
             print("Player died from plant damage.")
+            self.cause_of_death = "Spiky plant"
             self.game_state = GameState.DEAD
 
     # ==================================================================
