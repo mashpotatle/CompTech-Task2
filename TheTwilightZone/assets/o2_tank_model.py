@@ -5,7 +5,7 @@ from __future__ import annotations
 import pygame
 
 
-def create_oxygen_tank_sprite(width: int = 28, height: int = 28) -> pygame.Surface:
+def create_oxygen_tank_sprite(width: int = 70, height: int = 70) -> pygame.Surface:
     """Create a small oxygen tank marker that reads clearly in the cave."""
     surface = pygame.Surface((width, height), pygame.SRCALPHA)
     cx = width // 2

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pygame
 
 
-def create_fish_sprite(width: int = 32, height: int = 20) -> pygame.Surface:
+def create_fish_sprite(width: int = 80, height: int = 50) -> pygame.Surface:
     """Create a simple hostile-fish sprite with a tail and eye."""
     surface = pygame.Surface((width, height), pygame.SRCALPHA)
 

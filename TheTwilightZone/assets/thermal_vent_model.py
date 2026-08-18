@@ -5,7 +5,7 @@ from __future__ import annotations
 import pygame
 
 
-def create_thermal_vent_sprite(radius: int = 30) -> pygame.Surface:
+def create_thermal_vent_sprite(radius: int = 75) -> pygame.Surface:
     """Create a visible hot vent glow suitable for the cave environment."""
     diameter = max(24, radius * 2)
     surface = pygame.Surface((diameter, diameter), pygame.SRCALPHA)

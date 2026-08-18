@@ -8,8 +8,11 @@ The Game class coordinates the major game systems but does not own
 the level data itself. Level data is managed by LevelManager.
 """
 
-import pygame
+import math
 import random
+
+import pygame
+from pygame import mixer
 
 from assets.med_kit_model import create_med_kit_sprite
 from assets.o2_tank_model import create_oxygen_tank_sprite
@@ -40,6 +43,7 @@ from settings import (
     SETTINGS,
     TARGET_FPS,
     WINDOW_TITLE,
+    save_settings,
 )
 from paths import CAVE_SECTIONS_DIR
 
@@ -69,6 +73,15 @@ class Game:
         """
 
         pygame.init()
+
+        try:
+            pygame.mixer.init()
+            self.audio_enabled = True
+        except pygame.error:
+            self.audio_enabled = False
+
+        self._sound_cache = {}
+        self._init_audio()
 
         # ----------------------------------------------------------
         # Display
@@ -126,9 +139,18 @@ class Game:
         # player died.
         self.cause_of_death = "Unknown"
         self.distance_travelled = 0.0
-        self.oxygen_system = OxygenSystem(max_oxygen=100.0, drain_rate=6.0)
+        self.oxygen_system = OxygenSystem(max_oxygen=100.0, drain_rate=2.0)
         self.oxygen_percent = self.oxygen_system.percent
+        self.oxygen_fade_timer = 0.0
+        self.oxygen_fade_duration = 3.0
+        self.damage_flash_timer = 0.0
+        self.damage_flash_duration = 0.35
+        self.damage_flash_color = (255, 60, 60)
+        self.silt_intensity = 0.0
+        self.vent_heat_intensity = 0.0
+        self.low_oxygen_intensity = 0.0
         self.active_item_label = ""
+        self.showing_endless_confirmation = False
 
         # Controls whether the main game loop continues running.
         self.running = True
@@ -149,6 +171,49 @@ class Game:
         )
 
         self._start_new_run()
+
+    def _init_audio(self):
+        """Create lightweight generated SFX so the game has basic audio feedback."""
+        if not self.audio_enabled:
+            return
+
+        self._sound_cache = {
+            "menu": self._make_sound_tone(880.0, 0.08, 0.12),
+            "pickup": self._make_sound_tone(660.0, 0.12, 0.18),
+            "damage": self._make_sound_tone(200.0, 0.20, 0.25),
+            "confirm": self._make_sound_tone(1040.0, 0.10, 0.18),
+        }
+
+    def _make_sound_tone(self, frequency: float, duration: float = 0.08, volume: float = 0.18):
+        """Generate a simple sine-wave sound effect without external assets."""
+        if not self.audio_enabled:
+            return None
+
+        sample_rate = 22050
+        frame_count = max(1, int(sample_rate * duration))
+        raw = bytearray()
+        for index in range(frame_count):
+            t = index / sample_rate
+            value = math.sin(2 * math.pi * frequency * t)
+            amplitude = int(max(-1.0, min(1.0, value)) * 32767 * volume)
+            raw.extend((amplitude & 0xFF, (amplitude >> 8) & 0xFF))
+        sound = pygame.mixer.Sound(buffer=bytes(raw))
+        sound.set_volume(max(0.0, min(1.0, SETTINGS.master_volume / 100.0)))
+        return sound
+
+    def play_sound(self, name: str):
+        """Play a cached generated sound if audio is enabled."""
+        if not self.audio_enabled:
+            return
+        sound = self._sound_cache.get(name)
+        if sound is not None:
+            sound.play()
+
+    def trigger_damage_feedback(self, color: tuple[int, int, int] | None = None, duration: float | None = None) -> None:
+        """Trigger a brief screen flash to communicate damage or hazard contact."""
+        self.damage_flash_color = color or (255, 60, 60)
+        self.damage_flash_duration = duration if duration is not None else 0.35
+        self.damage_flash_timer = self.damage_flash_duration
 
     def _start_new_run(self):
         """
@@ -194,8 +259,22 @@ class Game:
         )
 
         # ----------------------------------------------------------
-        # Player
+        # Player / run state
         # ----------------------------------------------------------
+
+        # Reset the run-specific state so each restart starts from a clean
+        # slate instead of reusing the previous death state's inventory,
+        # oxygen, and traversal data.
+        self.inventory = Inventory()
+        self.oxygen_system = OxygenSystem(max_oxygen=100.0, drain_rate=2.0)
+        self.oxygen_percent = self.oxygen_system.percent
+        self.oxygen_fade_timer = 0.0
+        self.damage_flash_timer = 0.0
+        self.silt_intensity = 0.0
+        self.vent_heat_intensity = 0.0
+        self.low_oxygen_intensity = 0.0
+        self.active_item_label = ""
+        self.showing_endless_confirmation = False
 
         # Start the player at the entry position of the first section.
         #
@@ -284,26 +363,33 @@ class Game:
             if self.game_state == GameState.MAIN_MENU and not self.showing_endless_confirmation:
                 action = self.main_menu.handle_events(event, mouse_pos)
                 if action == "PLAY":
+                    self.play_sound("menu")
                     self.showing_endless_confirmation = True
                 elif action == "EXIT":
+                    self.play_sound("menu")
                     self.running = False
 
             if self.showing_endless_confirmation:
                 action = self.endless_run_confirmation.handle_events(event, mouse_pos)
                 if action == "START_ENDLESS":
+                    self.play_sound("confirm")
                     self.showing_endless_confirmation = False
                     self.game_state = GameState.PLAYING
                 elif action == "CANCEL":
+                    self.play_sound("menu")
                     self.showing_endless_confirmation = False
 
             if self.game_state == GameState.PLAYING and event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+                self.play_sound("menu")
                 self.game_state = GameState.PAUSED
                 self.pause_menu.confirming_quit = False
 
             if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 if self.game_state == GameState.PLAYING:
+                    self.play_sound("menu")
                     self.game_state = GameState.PAUSED
                 elif self.game_state == GameState.PAUSED:
+                    self.play_sound("menu")
                     self.game_state = GameState.PLAYING
                     self.pause_menu.confirming_quit = False
 
@@ -321,9 +407,11 @@ class Game:
             if self.game_state == GameState.PAUSED:
                 action = self.pause_menu.handle_events(event, mouse_pos, self.inventory.slots)
                 if action == "RESUME":
+                    self.play_sound("menu")
                     self.game_state = GameState.PLAYING
                     self.pause_menu.confirming_quit = False
                 elif action == "QUIT_TO_MENU":
+                    self.play_sound("menu")
                     self.game_state = GameState.MAIN_MENU
                     self.pause_menu.confirming_quit = False
                 elif isinstance(action, tuple) and action[0] == "SWAP_SLOTS":
@@ -336,9 +424,11 @@ class Game:
             if self.game_state == GameState.DEAD:
                 action = self.death_screen.handle_events(event, mouse_pos)
                 if action == "RESTART":
+                    self.play_sound("confirm")
                     self._start_new_run()
                     self.game_state = GameState.PLAYING
                 elif action == "MAIN_MENU":
+                    self.play_sound("menu")
                     self.game_state = GameState.MAIN_MENU
 
     # ==================================================================
@@ -356,6 +446,11 @@ class Game:
             delta_time:
                 Time in seconds since the previous frame.
         """
+
+        self.damage_flash_timer = max(0.0, self.damage_flash_timer - delta_time)
+        self.silt_intensity = max(0.0, self.silt_intensity - (delta_time * 0.8))
+        self.vent_heat_intensity = max(0.0, self.vent_heat_intensity - (delta_time * 1.2))
+        self.low_oxygen_intensity = max(0.0, self.low_oxygen_intensity - (delta_time * 1.0))
 
         if self.game_state == GameState.MAIN_MENU:
 
@@ -389,9 +484,32 @@ class Game:
         self,
         delta_time: float,
     ):
-        """Handle main-menu state transitions."""
+        """Keep the menu display synced with persisted settings."""
 
-        pass
+        # The menu reads the latest saved max-distance and colour-blind
+        # preference each frame so it reflects the most recent state without
+        # requiring a full menu rebuild.
+        self.main_menu.max_distance = SETTINGS.max_distance_travelled
+        self.main_menu.color_blind_enabled = SETTINGS.color_blind_mode
+
+    def update_pause_menu(
+        self,
+        delta_time: float,
+    ):
+        """Keep the pause overlay state coherent while gameplay is frozen."""
+
+        # The pause screen is a modal overlay; no gameplay simulation should run
+        # while it is active. The menu only needs to remain in sync with the
+        # current inventory and selection state.
+        self.pause_menu.pending_slot_selection = getattr(
+            self.pause_menu,
+            "pending_slot_selection",
+            None,
+        )
+
+        # Ensure the visible inventory and active selection stay aligned with the
+        # current run data.
+        self.pause_menu.draw(self.screen, self.inventory.slots)
 
     # ==================================================================
     # GAMEPLAY
@@ -429,9 +547,17 @@ class Game:
         self.oxygen_percent = self.oxygen_system.percent
 
         if self.oxygen_system.is_empty:
-            self.cause_of_death = "Drowning"
-            self.game_state = GameState.DEAD
+            if self.oxygen_fade_timer <= 0.0:
+                self.oxygen_fade_timer = self.oxygen_fade_duration
+                self.cause_of_death = "Drowning"
+            else:
+                self.oxygen_fade_timer = max(0.0, self.oxygen_fade_timer - delta_time)
+                if self.oxygen_fade_timer <= 0.0:
+                    self.game_state = GameState.DEAD
+                    return
             return
+
+        self.oxygen_fade_timer = 0.0
 
         # ----------------------------------------------------------
         # Player movement
@@ -494,11 +620,16 @@ class Game:
         # Silt clouds
         # ----------------------------------------------------------
 
+        silt_active = False
         for cloud in self.silt_clouds:
             cloud.update(delta_time)
             offset = cloud.position - self.player.position
             if offset.length() <= cloud.effect_radius:
+                silt_active = True
+                self.silt_intensity = max(self.silt_intensity, 0.85)
                 self.player.velocity *= 1.0 - min(0.75, cloud.speed_reduction * 0.75)
+        if not silt_active:
+            self.silt_intensity = max(0.0, self.silt_intensity - (delta_time * 1.5))
 
         # ----------------------------------------------------------
         # Thermal vents
@@ -508,13 +639,22 @@ class Game:
             vent.update(delta_time)
             distance = self.player.position.distance_to(vent.position)
             if distance <= vent.damage_radius:
+                self.vent_heat_intensity = max(self.vent_heat_intensity, 1.0)
                 damage = vent.get_damage_at_distance(distance) * delta_time
                 if damage > 0:
                     self.player.apply_damage(int(damage))
+                    self.trigger_damage_feedback((255, 140, 0), 0.28)
                     if self.player.health <= 0:
                         self.cause_of_death = "Thermal vent"
                         self.game_state = GameState.DEAD
                         return
+            elif distance <= vent.damage_radius * 1.7:
+                self.vent_heat_intensity = max(self.vent_heat_intensity, 0.55)
+
+        if self.oxygen_percent < 25.0:
+            self.low_oxygen_intensity = max(self.low_oxygen_intensity, 1.0)
+        else:
+            self.low_oxygen_intensity = max(0.0, self.low_oxygen_intensity - (delta_time * 1.2))
 
         # ----------------------------------------------------------
         # Active section
@@ -702,6 +842,11 @@ class Game:
             is_new_high_score,
         )
 
+        if is_new_high_score:
+            save_settings(SETTINGS)
+        elif self.distance_travelled >= SETTINGS.max_distance_travelled:
+            save_settings(SETTINGS)
+
     # ==================================================================
     # RENDERING
     # ==================================================================
@@ -721,6 +866,16 @@ class Game:
         )
 
         if self.game_state in (GameState.PLAYING, GameState.PAUSED):
+
+            # ------------------------------------------------------
+            # Draw thermal vents behind all gameplay geometry and actors.
+            # ------------------------------------------------------
+
+            for vent in self.thermal_vents:
+                vent.draw(
+                    self.screen,
+                    self.camera,
+                )
 
             # ------------------------------------------------------
             # Draw level geometry
@@ -744,16 +899,6 @@ class Game:
 
             for cloud in self.silt_clouds:
                 cloud.draw(
-                    self.screen,
-                    self.camera,
-                )
-
-            # ------------------------------------------------------
-            # Draw thermal vents
-            # ------------------------------------------------------
-
-            for vent in self.thermal_vents:
-                vent.draw(
                     self.screen,
                     self.camera,
                 )
@@ -849,6 +994,37 @@ class Game:
             self.main_menu.draw(self.screen)
         elif self.game_state == GameState.DEAD:
             self.death_screen.draw(self.screen)
+
+        if self.damage_flash_timer > 0:
+            alpha = int((self.damage_flash_timer / max(self.damage_flash_duration, 0.01)) * 120)
+            flash = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            flash.fill((*self.damage_flash_color, alpha))
+            self.screen.blit(flash, (0, 0))
+
+        if self.oxygen_fade_timer > 0:
+            fade_progress = 1.0 - (self.oxygen_fade_timer / max(self.oxygen_fade_duration, 0.01))
+            fade_alpha = int(fade_progress * 220)
+            fade = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            fade.fill((0, 0, 0, fade_alpha))
+            self.screen.blit(fade, (0, 0))
+
+        if self.silt_intensity > 0.05:
+            silt_overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            alpha = int(self.silt_intensity * 180)
+            silt_overlay.fill((12, 22, 26, alpha))
+            self.screen.blit(silt_overlay, (0, 0))
+
+        if self.vent_heat_intensity > 0.05:
+            warmth = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            alpha = int(self.vent_heat_intensity * 110)
+            warmth.fill((255, 120, 40, alpha))
+            self.screen.blit(warmth, (0, 0))
+
+        if self.low_oxygen_intensity > 0.05:
+            low_o2 = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            alpha = int(self.low_oxygen_intensity * 80)
+            low_o2.fill((40, 120, 170, alpha))
+            self.screen.blit(low_o2, (0, 0))
 
         if self.showing_endless_confirmation:
             self.endless_run_confirmation.draw(self.screen)
@@ -1016,11 +1192,11 @@ class Game:
 
         item_type = str(element.properties.get("item_type", "oxygen_tank"))
         if item_type == "oxygen_tank":
-            sprite = create_oxygen_tank_sprite(28, 28)
+            sprite = create_oxygen_tank_sprite(70, 70)
             sprite_rect = sprite.get_rect(center=(int(screen_position.x), int(screen_position.y)))
             self.screen.blit(sprite, sprite_rect)
         elif item_type == "med_kit":
-            sprite = create_med_kit_sprite(28, 28)
+            sprite = create_med_kit_sprite(70, 70)
             sprite_rect = sprite.get_rect(center=(int(screen_position.x), int(screen_position.y)))
             self.screen.blit(sprite, sprite_rect)
         else:
@@ -1197,7 +1373,7 @@ class Game:
                 position=element.position,
                 plant_id=element.element_id,
                 damage=properties.get("damage", 15),
-                radius=properties.get("radius", 24),
+                radius=float(properties.get("radius", 24)) * 2.5,
             )
 
             self.spiky_plants.add(plant)
@@ -1273,17 +1449,17 @@ class Game:
                 position=element.position,
                 vent_id=element.element_id,
                 direction=tuple(properties.get("direction", [1.0, 0.0])),
-                radius=float(properties.get("radius", 26.0)),
-                heat_radius=float(properties.get("heat_radius", 100.0)),
+                radius=float(properties.get("radius", 26.0)) * 2.5,
+                heat_radius=float(properties.get("heat_radius", 100.0)) * 2.5,
                 heat_damage=float(properties.get("heat_damage", 5.0)),
                 eruption_damage=float(properties.get("eruption_damage", 20.0)),
                 eruption_duration=float(properties.get("eruption_duration", 1.0)),
                 eruption_interval=float(properties.get("eruption_interval", 5.0)),
-                haze_length=float(properties.get("haze_length", 95.0)),
-                haze_width=float(properties.get("haze_width", 30.0)),
+                haze_length=float(properties.get("haze_length", 95.0)) * 2.5,
+                haze_width=float(properties.get("haze_width", 30.0)) * 2.5,
                 haze_alpha=int(properties.get("haze_alpha", 65)),
                 bubble_count=int(properties.get("bubble_count", 14)),
-                bubble_spread=float(properties.get("bubble_spread", 15.0)),
+                bubble_spread=float(properties.get("bubble_spread", 15.0)) * 2.5,
                 bubble_speed=float(properties.get("bubble_speed", 1.0)),
             )
             self.thermal_vents.add(vent)
@@ -1313,6 +1489,8 @@ class Game:
                                 dropped_item.properties["collected"] = True
                                 dropped_item.properties["in_inventory"] = True
 
+                        self.play_sound("pickup")
+
     def use_active_item(self):
         """Apply the active item effect to the player and remove it.
 
@@ -1327,8 +1505,10 @@ class Game:
         if item_name == "oxygen_tank":
             self.oxygen_system.restore(35.0)
             self.oxygen_percent = self.oxygen_system.percent
+            self.play_sound("pickup")
         elif item_name == "med_kit":
             self.player.health = min(100, self.player.health + 25)
+            self.play_sound("pickup")
 
     def drop_active_item(self):
         """Drop the currently selected hotbar item into the world."""
@@ -1377,6 +1557,8 @@ class Game:
         if getattr(self.player, "health", 1) <= 0:
             print("Player died from fish damage.")
             self.cause_of_death = "Eaten by a fish"
+            self.trigger_damage_feedback()
+            self.play_sound("damage")
             self.game_state = GameState.DEAD
 
     def handle_spiky_plant_damage(
@@ -1399,6 +1581,8 @@ class Game:
         if getattr(self.player, "health", 1) <= 0:
             print("Player died from plant damage.")
             self.cause_of_death = "Spiky plant"
+            self.trigger_damage_feedback()
+            self.play_sound("damage")
             self.game_state = GameState.DEAD
 
     # ==================================================================

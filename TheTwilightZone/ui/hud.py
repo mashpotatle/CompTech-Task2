@@ -13,6 +13,7 @@ import math
 import pygame
 
 from ui.layout import load_layout
+from ui import theme
 
 LOW_VALUE_THRESHOLD = 25
 
@@ -22,13 +23,13 @@ class HUD:
 
     def __init__(self):
         self.layout = load_layout("hud")
-        self.font = pygame.font.Font(None, 22)
+        self.font = pygame.font.Font(None, theme.FONT_SMALL)
 
         self.bg_color = (30, 30, 30)
-        self.border_color = (255, 255, 255)
+        self.border_color = theme.COLOR_BORDER
         self.hp_color = (200, 60, 60)
         self.o2_color = (70, 170, 210)
-        self.text_color = (255, 255, 255)
+        self.text_color = theme.COLOR_TEXT
 
     def draw(self, surface: pygame.Surface, hp_percent: float, o2_percent: float) -> None:
         hp_percent = max(0.0, min(100.0, hp_percent))
@@ -41,7 +42,7 @@ class HUD:
         self._draw_bar(surface, o2_rect, "O2", o2_percent, self.o2_color)
 
     def _draw_bar(self, surface, rect: pygame.Rect, label: str, percent: float, color) -> None:
-        pygame.draw.rect(surface, self.bg_color, rect, border_radius=4)
+        pygame.draw.rect(surface, self.bg_color, rect, border_radius=theme.BAR_BORDER_RADIUS)
 
         fill_color = color
         if percent <= LOW_VALUE_THRESHOLD:
@@ -52,9 +53,9 @@ class HUD:
         fill_width = int(rect.width * (percent / 100))
         if fill_width > 0:
             fill_rect = pygame.Rect(rect.x, rect.y, fill_width, rect.height)
-            pygame.draw.rect(surface, fill_color, fill_rect, border_radius=4)
+            pygame.draw.rect(surface, fill_color, fill_rect, border_radius=theme.BAR_BORDER_RADIUS)
 
-        pygame.draw.rect(surface, self.border_color, rect, 2, border_radius=4)
+        pygame.draw.rect(surface, self.border_color, rect, theme.BUTTON_BORDER_WIDTH, border_radius=theme.BAR_BORDER_RADIUS)
 
         label_surf = self.font.render(f"{label} {int(percent)}%", True, self.text_color)
         label_rect = label_surf.get_rect(center=rect.center)

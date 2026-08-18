@@ -40,18 +40,18 @@ class Player:
         # Movement speed is measured in pixels per second.
         self.speed = 250
 
-        # Temporary player dimensions used until the player sprite
-        # is implemented.
-        self.width = 40
-        self.height = 40
+        # Tall side-on hitbox to match the diver silhouette.
+        self.width = PLAYER_WIDTH
+        self.height = PLAYER_HEIGHT
+        self.facing = 1
 
         # Create a rectangular hitbox centred around the player's
         # position. This will later be used for collision detection.
         self.rect = pygame.Rect(
             0,
             0,
-            PLAYER_WIDTH,
-            PLAYER_HEIGHT
+            self.width,
+            self.height,
         )
 
         self.rect.center = (
@@ -103,6 +103,7 @@ class Player:
         # than movement in a single direction.
         if self.velocity.length_squared() > 0:
             self.velocity = self.velocity.normalize()
+            self.facing = 1 if self.velocity.x >= 0 else -1
 
     def update(self, delta_time, collision_system):
         """
@@ -242,11 +243,9 @@ class Player:
             round(screen_position.y + wobble_offset_y),
         )
 
-        sprite = pygame.transform.rotate(self.sprite, 0)
-        if self.velocity.length_squared() > 0:
-            angle = math.degrees(math.atan2(self.velocity.y, self.velocity.x))
-            if self.velocity.x != 0 or self.velocity.y != 0:
-                sprite = pygame.transform.rotate(self.sprite, -angle)
+        sprite = self.sprite
+        if self.facing < 0:
+            sprite = pygame.transform.flip(self.sprite, True, False)
 
         sprite_rect = sprite.get_rect(center=screen_rect.center)
         screen.blit(sprite, sprite_rect)

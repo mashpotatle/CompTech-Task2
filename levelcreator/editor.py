@@ -915,45 +915,36 @@ class LevelEditor:
         haze_length = max(18.0, float(e.properties.get("haze_length", 95.0)) * self.zoom)
         haze_width = max(8.0, float(e.properties.get("haze_width", 30.0)) * self.zoom)
 
-        layers = 5
-        for i in range(layers):
-            t = (i + 1) / layers
-            layer_center = center + direction * (haze_length * t * 0.55)
-            half_width = haze_width * (1.0 - t * 0.55)
-            half_len = haze_length * (0.14 + t * 0.1)
+        # Yellow-to-orange plume that originates from the vent mouth.
+        for i in range(14):
+            t = (i + 1) / 14.0
+            start = center + direction * (haze_length * (t - 0.12))
+            end = center + direction * (haze_length * t)
+            half_width = haze_width * (0.12 + (1.0 - t) * 0.9)
             polygon = [
-                layer_center - direction * half_len + side * half_width,
-                layer_center + direction * half_len + side * (half_width * 0.58),
-                layer_center + direction * half_len - side * (half_width * 0.58),
-                layer_center - direction * half_len - side * half_width,
+                start - side * half_width,
+                end + side * half_width * 0.7,
+                end - side * half_width * 0.7,
+                start + side * half_width,
             ]
-            alpha = max(14, 65 - i * 10)
-            haze_surface = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
-            pygame.draw.polygon(
-                haze_surface,
-                (255, 92, 70, alpha),
-                [(round(p.x), round(p.y)) for p in polygon],
-            )
-            self.screen.blit(haze_surface, (0, 0))
+            color_t = min(1.0, t * 1.2)
+            red = 255
+            green = int(240 - (240 - 150) * color_t)
+            blue = int(70 + (180 - 70) * (1.0 - color_t))
+            alpha = int(80 + (170 - 80) * (1.0 - t))
+            pygame.draw.polygon(self.screen, (red, green, blue, alpha), [(p.x, p.y) for p in polygon])
 
-        bubble_count = max(4, int(e.properties.get("bubble_count", 14)))
+        bubble_count = max(6, int(e.properties.get("bubble_count", 14)))
         bubble_spread = max(2.0, float(e.properties.get("bubble_spread", 15.0)) * self.zoom)
         for i in range(bubble_count):
             t = (i + 1) / (bubble_count + 1)
-            lateral = ((i % 2) * 2 - 1) * bubble_spread * (0.35 + (i % 3) * 0.2)
-            bubble_pos = center + direction * (haze_length * t) + side * lateral * (1.0 - t * 0.7)
-            bubble_radius = max(1, round((1.0 - t) * 3.0))
-            alpha = max(30, round(210 * (1.0 - t)))
-            pygame.draw.circle(
-                self.screen,
-                (255, 212, 195, alpha),
-                (round(bubble_pos.x), round(bubble_pos.y)),
-                bubble_radius,
-            )
+            wobble = ((i % 2) * 2 - 1) * bubble_spread * 0.5 * (0.3 + (1.0 - t))
+            bubble_pos = center + direction * (haze_length * t) + side * wobble
+            bubble_radius = max(1, round((1.0 - t) * 2.5))
+            alpha = max(45, round(160 * (1.0 - t)))
+            pygame.draw.circle(self.screen, (255, 236, 190, alpha), (round(bubble_pos.x), round(bubble_pos.y)), bubble_radius)
 
-        end = center + direction * (haze_length * 0.75)
-        pygame.draw.line(self.screen, WHITE, center, end, 2)
-        self.arrowhead(center, end, WHITE)
+        pygame.draw.circle(self.screen, (255, 210, 110, 210), (round(center.x), round(center.y)), max(2, round(4*self.zoom)))
 
     def draw_entry_exit(self) -> None:
         for label, x, y, colour, direction in (

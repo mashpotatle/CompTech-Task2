@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pygame
 
+from ui import theme
 from ui.layout import load_layout
 from ui.menus import UIButton
 
@@ -21,27 +22,32 @@ class DeathScreen:
         self.height = screen_height
         self.layout = load_layout("death_screen")
 
-        self.font_title = pygame.font.Font(None, 48)
-        self.font_medium = pygame.font.Font(None, 32)
-        self.font_small = pygame.font.Font(None, 26)
+        self.font_headline = pygame.font.Font(None, theme.FONT_HEADLINE)
+        self.font_large = pygame.font.Font(None, theme.FONT_LARGE)
+        self.font_medium = pygame.font.Font(None, theme.FONT_MEDIUM)
+        self.font_small = pygame.font.Font(None, theme.FONT_SMALL)
 
-        self.text_color = (255, 255, 255)
-        self.panel_color = (40, 40, 40)
-        self.btn_color = (80, 80, 80)
+        self.text_color = theme.COLOR_TEXT
+        self.panel_color = theme.COLOR_PANEL
+        self.btn_color = theme.COLOR_BUTTON
 
         self.distance = 0
         self.cause_of_death = "Unknown"
         self.is_new_high_score = False
 
-        yes_rect = self.layout.rect("btn_yes", pygame.Rect(352, 340, 100, 46))
+        default_yes_rect, default_no_rect = theme.confirm_button_positions(self.width // 2, 340)
+
+        yes_rect = self.layout.rect("btn_yes", default_yes_rect)
         self.btn_restart = UIButton(
             yes_rect.x, yes_rect.y, yes_rect.width, yes_rect.height,
-            self.layout.get("btn_yes", "text", "Yes"), self.font_medium, self.btn_color, (50, 200, 50),
+            self.layout.get("btn_yes", "text", "Yes"), self.font_large, self.btn_color,
+            theme.COLOR_BUTTON_CONFIRM_HOVER,
         )
-        no_rect = self.layout.rect("btn_no", pygame.Rect(472, 340, 100, 46))
+        no_rect = self.layout.rect("btn_no", default_no_rect)
         self.btn_menu = UIButton(
             no_rect.x, no_rect.y, no_rect.width, no_rect.height,
-            self.layout.get("btn_no", "text", "No"), self.font_medium, self.btn_color, (200, 50, 50),
+            self.layout.get("btn_no", "text", "No"), self.font_large, self.btn_color,
+            theme.COLOR_BUTTON_DANGER_HOVER,
         )
 
     def set_result(self, distance: float, cause_of_death: str, is_new_high_score: bool = False) -> None:
@@ -62,14 +68,16 @@ class DeathScreen:
         return None
 
     def draw(self, surface: pygame.Surface) -> None:
-        surface.fill((8, 12, 20))
+        theme.draw_gradient_background(surface, self.width, self.height)
 
         panel_rect = self.layout.rect("panel", pygame.Rect(332, 220, 360, 330))
-        pygame.draw.rect(surface, self.panel_color, panel_rect, border_radius=10)
-        pygame.draw.rect(surface, (255, 255, 255), panel_rect, 2, border_radius=10)
+        pygame.draw.rect(surface, self.panel_color, panel_rect, border_radius=theme.PANEL_BORDER_RADIUS)
+        pygame.draw.rect(
+            surface, theme.COLOR_BORDER, panel_rect, theme.PANEL_BORDER_WIDTH, border_radius=theme.PANEL_BORDER_RADIUS
+        )
 
         title_text = "New High Score!" if self.is_new_high_score else "You Died"
-        title_surf = self.font_title.render(title_text, True, self.text_color)
+        title_surf = self.font_headline.render(title_text, True, self.text_color)
         title_rect_widget = self.layout.rect("title", pygame.Rect(352, 240, 320, 40))
         surface.blit(title_surf, title_surf.get_rect(center=title_rect_widget.center))
 

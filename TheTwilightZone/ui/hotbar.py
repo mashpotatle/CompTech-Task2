@@ -10,6 +10,7 @@ from __future__ import annotations
 import pygame
 
 from ui.layout import load_layout
+from ui import theme
 
 SLOT_COUNT = 5
 
@@ -19,12 +20,12 @@ class Hotbar:
 
     def __init__(self):
         self.layout = load_layout("hotbar")
-        self.font = pygame.font.Font(None, 20)
+        self.font = pygame.font.Font(None, theme.FONT_TINY)
 
         self.slot_color = (200, 200, 200)
         self.slot_fill = (50, 50, 50)
-        self.active_color = (180, 120, 60)
-        self.text_color = (255, 255, 255)
+        self.active_color = theme.COLOR_ACCENT
+        self.text_color = theme.COLOR_TEXT
 
     def slot_rects(self, surface: pygame.Surface) -> list[pygame.Rect]:
         bar_rect = self.layout.rect(

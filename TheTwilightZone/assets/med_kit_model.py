@@ -5,7 +5,7 @@ from __future__ import annotations
 import pygame
 
 
-def create_med_kit_sprite(width: int = 28, height: int = 28) -> pygame.Surface:
+def create_med_kit_sprite(width: int = 70, height: int = 70) -> pygame.Surface:
     """Create a compact med-kit pickup sprite."""
     surface = pygame.Surface((width, height), pygame.SRCALPHA)
     cx = width // 2

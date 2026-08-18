@@ -83,57 +83,49 @@ class ThermalVent(pygame.sprite.Sprite):
         center = pygame.Vector2(self.image.get_width() / 2, self.image.get_height() / 2)
         side = pygame.Vector2(-self.direction.y, self.direction.x)
 
-        # Vent mouth glow.
-        pygame.draw.circle(self.image, (255, 95, 52, 240), (round(center.x), round(center.y)), int(self.radius))
-        pygame.draw.circle(self.image, (255, 185, 105, 235), (round(center.x), round(center.y)), max(3, int(self.radius * 0.45)))
+        plume_length = max(self.haze_length, self.radius * 2.5, 50.0)
+        plume_width = max(self.haze_width, self.radius * 1.2, 18.0)
 
-        # Faint red haze plume extending in vent direction.
-        layers = 6
-        for i in range(layers):
-            t = (i + 1) / layers
-            layer_center = center + self.direction * (self.haze_length * t * 0.56)
-            half_width = self.haze_width * (1.0 - t * 0.52)
-            half_len = self.haze_length * (0.12 + t * 0.11)
+        # Soft yellow-to-orange plume emanating from the vent mouth.
+        for i in range(18):
+            t = (i + 1) / 18.0
+            start = center + self.direction * (plume_length * (t - 0.12))
+            end = center + self.direction * (plume_length * t)
+            half_width = plume_width * (0.12 + (1.0 - t) * 0.9)
+            point_a = start - side * half_width
+            point_b = end + side * half_width * 0.7
+            point_c = end - side * half_width * 0.7
+            point_d = start + side * half_width
 
-            points = [
-                layer_center - self.direction * half_len + side * half_width,
-                layer_center + self.direction * half_len + side * (half_width * 0.58),
-                layer_center + self.direction * half_len - side * (half_width * 0.58),
-                layer_center - self.direction * half_len - side * half_width,
-            ]
-            alpha = int(self.haze_alpha * (1.0 - t * 0.82))
+            color_t = min(1.0, t * 1.25)
+            r = int(255)
+            g = int(240 - (240 - 150) * color_t)
+            b = int(70 + (180 - 70) * (1.0 - color_t))
+            alpha = int(80 + (180 - 80) * (1.0 - t))
             pygame.draw.polygon(
                 self.image,
-                (255, 78, 68, max(0, alpha)),
-                [(round(p.x), round(p.y)) for p in points],
+                (r, g, b, alpha),
+                [(round(point_a.x), round(point_a.y)), (round(point_b.x), round(point_b.y)),
+                 (round(point_c.x), round(point_c.y)), (round(point_d.x), round(point_d.y))],
             )
 
-        # Fine bubbles that stream through the haze.
-        for i in range(self.bubble_count):
+        # Fine bubbles stream away from the vent in a single narrow line.
+        for i in range(max(8, self.bubble_count)):
             t = (self._animation_time + i / max(1, self.bubble_count)) % 1.0
-            forward = self.haze_length * (0.08 + t * 0.92)
-            wobble = math.sin((t * 10.0 + i * 0.7) * math.tau) * self.bubble_spread * (1.0 - t)
-            bubble_pos = center + self.direction * forward + side * wobble
-
-            bubble_radius = max(1, int(1 + (1.0 - t) * 2.0))
-            bubble_alpha = max(18, int(200 * (1.0 - t)))
-
+            bubble_distance = plume_length * (0.12 + t * 0.88)
+            wobble = math.sin((t * 16.0 + i * 0.8) * math.tau) * self.bubble_spread * 0.25
+            bubble_pos = center + self.direction * bubble_distance + side * wobble
+            bubble_radius = max(1, int(2.0 * (1.0 - t * 0.65)))
+            bubble_alpha = max(25, int(180 * (1.0 - t)))
             pygame.draw.circle(
                 self.image,
-                (255, 228, 210, bubble_alpha),
+                (255, 238, 190, bubble_alpha),
                 (round(bubble_pos.x), round(bubble_pos.y)),
                 bubble_radius,
             )
 
-        # Direction indicator to keep the vent easy to read.
-        end = center + self.direction * max(self.radius * 1.2, self.haze_length * 0.45)
-        pygame.draw.line(
-            self.image,
-            (255, 235, 215, 170),
-            (round(center.x), round(center.y)),
-            (round(end.x), round(end.y)),
-            2,
-        )
+        # Tiny vent mouth for the source point.
+        pygame.draw.circle(self.image, (255, 208, 112, 220), (round(center.x), round(center.y)), max(2, int(self.radius * 0.35)))
 
     def draw(self, screen: pygame.Surface, camera=None) -> None:
         """Draw the vent."""

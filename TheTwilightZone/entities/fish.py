@@ -47,7 +47,7 @@ class Fish(pygame.sprite.Sprite):
         # Visual
         # --------------------------------------------------------------
 
-        self.image = create_fish_sprite(32, 20)
+        self.image = create_fish_sprite()
 
         self.rect = self.image.get_rect(
             center=(

@@ -6,8 +6,8 @@
     { "id": "panel", "type": "panel", "x": 332, "y": 220, "w": 360, "h": 330, "text": "" },
     { "id": "title", "type": "label", "x": 352, "y": 240, "w": 320, "h": 40, "text": "You Died" },
     { "id": "prompt", "type": "label", "x": 352, "y": 290, "w": 320, "h": 40, "text": "Would you like to Restart?" },
-    { "id": "btn_yes", "type": "button", "x": 352, "y": 340, "w": 100, "h": 46, "text": "Yes" },
-    { "id": "btn_no", "type": "button", "x": 472, "y": 340, "w": 100, "h": 46, "text": "No" },
+    { "id": "btn_yes", "type": "button", "x": 360, "y": 340, "w": 140, "h": 52, "text": "Yes" },
+    { "id": "btn_no", "type": "button", "x": 524, "y": 340, "w": 140, "h": 52, "text": "No" },
     { "id": "cause_of_death", "type": "label", "x": 352, "y": 410, "w": 320, "h": 30, "text": "Cause Of Death" },
     { "id": "distance_travelled", "type": "label", "x": 352, "y": 450, "w": 320, "h": 30, "text": "Distance Traveled" }
   ]

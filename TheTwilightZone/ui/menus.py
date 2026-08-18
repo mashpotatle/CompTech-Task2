@@ -1,6 +1,7 @@
 import pygame
 
-from settings import SETTINGS
+from settings import SETTINGS, save_settings
+from ui import theme
 from ui.layout import load_layout
 
 
@@ -15,7 +16,7 @@ class UIButton:
         self.hover_color = hover_color
         self.hovered = False
 
-        self.label = self.font.render(text, True, (255, 255, 255))
+        self.label = self.font.render(text, True, theme.COLOR_TEXT)
         self.label_rect = self.label.get_rect(center=self.rect.center)
 
     def check_hover(self, mouse_pos):
@@ -29,8 +30,10 @@ class UIButton:
 
     def draw(self, surface):
         color = self.hover_color if self.hovered else self.base_color
-        pygame.draw.rect(surface, color, self.rect, border_radius=6)
-        pygame.draw.rect(surface, (255, 255, 255), self.rect, 2, border_radius=6)
+        pygame.draw.rect(surface, color, self.rect, border_radius=theme.BUTTON_BORDER_RADIUS)
+        pygame.draw.rect(
+            surface, theme.COLOR_BORDER, self.rect, theme.BUTTON_BORDER_WIDTH, border_radius=theme.BUTTON_BORDER_RADIUS
+        )
         surface.blit(self.label, self.label_rect)
 
 
@@ -40,16 +43,17 @@ class MainMenu:
     def __init__(self, screen_width, screen_height):
         self.width = screen_width
         self.height = screen_height
-        self.font_title = pygame.font.Font(None, 84)
-        self.font_large = pygame.font.Font(None, 56)
-        self.font_medium = pygame.font.Font(None, 36)
-        self.font_small = pygame.font.Font(None, 28)
+        self.font_title = pygame.font.Font(None, theme.FONT_TITLE)
+        self.font_headline = pygame.font.Font(None, theme.FONT_HEADLINE)
+        self.font_large = pygame.font.Font(None, theme.FONT_LARGE)
+        self.font_medium = pygame.font.Font(None, theme.FONT_MEDIUM)
+        self.font_small = pygame.font.Font(None, theme.FONT_SMALL)
 
-        self.text_color = (255, 255, 255)
-        self.panel_color = (40, 40, 40)
-        self.btn_color = (80, 80, 80)
-        self.btn_hover = (120, 120, 120)
-        self.accent_color = (180, 120, 60)
+        self.text_color = theme.COLOR_TEXT
+        self.panel_color = theme.COLOR_PANEL
+        self.btn_color = theme.COLOR_BUTTON
+        self.btn_hover = theme.COLOR_BUTTON_HOVER
+        self.accent_color = theme.COLOR_ACCENT
 
         self.max_distance = SETTINGS.max_distance_travelled
         self.color_blind_enabled = SETTINGS.color_blind_mode
@@ -59,7 +63,13 @@ class MainMenu:
         # fallback in case that file is missing.
         self.layout = load_layout("main_menu")
 
-        play_rect = self.layout.rect("btn_play", pygame.Rect(120, 220, 220, 54))
+        button_x = 120
+        play_y = 220
+        exit_y = play_y + theme.BUTTON_HEIGHT + theme.BUTTON_SPACING
+
+        play_rect = self.layout.rect(
+            "btn_play", pygame.Rect(button_x, play_y, theme.BUTTON_WIDTH, theme.BUTTON_HEIGHT)
+        )
         self.btn_play = UIButton(
             play_rect.x,
             play_rect.y,
@@ -70,7 +80,9 @@ class MainMenu:
             self.btn_color,
             self.btn_hover,
         )
-        exit_rect = self.layout.rect("btn_exit", pygame.Rect(120, 300, 220, 54))
+        exit_rect = self.layout.rect(
+            "btn_exit", pygame.Rect(button_x, exit_y, theme.BUTTON_WIDTH, theme.BUTTON_HEIGHT)
+        )
         self.btn_exit = UIButton(
             exit_rect.x,
             exit_rect.y,
@@ -79,7 +91,7 @@ class MainMenu:
             self.layout.get("btn_exit", "text", "X Exit Game"),
             self.font_large,
             self.btn_color,
-            (200, 50, 50),
+            theme.COLOR_BUTTON_DANGER_HOVER,
         )
         self.panel_rect = self.layout.rect("panel_settings", pygame.Rect(self.width - 280, 180, 220, 260))
 
@@ -97,6 +109,7 @@ class MainMenu:
             if toggle_rect.collidepoint(event.pos):
                 SETTINGS.color_blind_mode = not SETTINGS.color_blind_mode
                 self.color_blind_enabled = SETTINGS.color_blind_mode
+                save_settings(SETTINGS)
                 return None
 
             self._handle_slider_click(event.pos)
@@ -107,17 +120,18 @@ class MainMenu:
         return None
 
     def draw(self, surface):
-        surface.fill((8, 12, 20))
+        theme.draw_gradient_background(surface, self.width, self.height)
+
+        pygame.draw.circle(surface, (20, 120, 140), (self.width // 2, 180), 88, 2)
+        pygame.draw.circle(surface, (20, 120, 140), (self.width // 2, 180), 58, 1)
+        pygame.draw.circle(surface, self.accent_color, (self.width // 2, 180), 22, 2)
 
         title_surf = self.font_title.render("The Twilight Zone", True, self.text_color)
         title_rect = title_surf.get_rect(center=(self.width // 2, 90))
         surface.blit(title_surf, title_rect)
 
-        pygame.draw.circle(surface, self.text_color, (self.width // 2, 180), 70, 2)
-        pygame.draw.circle(surface, self.text_color, (self.width // 2, 180), 45, 1)
-
         distance_label = self.font_medium.render("Max Distance", True, self.text_color)
-        distance_value = self.font_large.render(f"{self.max_distance} m", True, self.accent_color)
+        distance_value = self.font_headline.render(f"{self.max_distance} m", True, self.accent_color)
         surface.blit(distance_label, (120, 170))
         surface.blit(distance_value, (120, 205))
 
@@ -125,8 +139,10 @@ class MainMenu:
         self.btn_exit.draw(surface)
 
         panel_rect = self.panel_rect
-        pygame.draw.rect(surface, self.panel_color, panel_rect, border_radius=10)
-        pygame.draw.rect(surface, (255, 255, 255), panel_rect, 2, border_radius=10)
+        pygame.draw.rect(surface, self.panel_color, panel_rect, border_radius=theme.PANEL_BORDER_RADIUS)
+        pygame.draw.rect(
+            surface, theme.COLOR_BORDER, panel_rect, theme.PANEL_BORDER_WIDTH, border_radius=theme.PANEL_BORDER_RADIUS
+        )
 
         panel_title = self.font_medium.render(
             self.layout.get("panel_settings", "text", "Settings"), True, self.text_color
@@ -168,6 +184,7 @@ class MainMenu:
                     SETTINGS.menus_volume = percent
                 elif index == 3:
                     SETTINGS.game_volume = percent
+                save_settings(SETTINGS)
                 return
 
     def _handle_slider_drag(self, pos):
@@ -178,9 +195,11 @@ class MainMenu:
         surface.blit(label_surf, (x, y))
 
         bar_rect = pygame.Rect(x, y + 22, 150, 8)
-        pygame.draw.rect(surface, (70, 70, 70), bar_rect, border_radius=4)
+        pygame.draw.rect(surface, (70, 70, 70), bar_rect, border_radius=theme.BAR_BORDER_RADIUS)
         fill_width = int(150 * (percent / 100))
-        pygame.draw.rect(surface, self.accent_color, pygame.Rect(x, y + 22, fill_width, 8), border_radius=4)
+        pygame.draw.rect(
+            surface, self.accent_color, pygame.Rect(x, y + 22, fill_width, 8), border_radius=theme.BAR_BORDER_RADIUS
+        )
         percent_surf = self.font_small.render(f"{percent}%", True, self.text_color)
         surface.blit(percent_surf, (x + 165, y - 2))
 
@@ -191,35 +210,34 @@ class EndlessRunConfirmation:
     def __init__(self, screen_width, screen_height):
         self.width = screen_width
         self.height = screen_height
-        self.font_large = pygame.font.Font(None, 64)
-        self.font_medium = pygame.font.Font(None, 36)
+        self.font_headline = pygame.font.Font(None, theme.FONT_HEADLINE)
+        self.font_large = pygame.font.Font(None, theme.FONT_LARGE)
 
-        self.text_color = (255, 255, 255)
-        self.btn_color = (80, 80, 80)
-        self.btn_hover = (120, 120, 120)
+        self.text_color = theme.COLOR_TEXT
+        self.btn_color = theme.COLOR_BUTTON
+        self.btn_hover = theme.COLOR_BUTTON_HOVER
 
-        btn_w, btn_h = 140, 50
-        center_x = self.width // 2 - btn_w // 2
+        yes_rect, no_rect = theme.confirm_button_positions(self.width // 2, 270)
 
         self.btn_yes = UIButton(
-            center_x - 90,
-            270,
-            btn_w,
-            btn_h,
+            yes_rect.x,
+            yes_rect.y,
+            yes_rect.width,
+            yes_rect.height,
             "Yes",
-            self.font_medium,
+            self.font_large,
             self.btn_color,
-            (50, 200, 50),
+            theme.COLOR_BUTTON_CONFIRM_HOVER,
         )
         self.btn_no = UIButton(
-            center_x + 50,
-            270,
-            btn_w,
-            btn_h,
+            no_rect.x,
+            no_rect.y,
+            no_rect.width,
+            no_rect.height,
             "No",
-            self.font_medium,
+            self.font_large,
             self.btn_color,
-            (200, 50, 50),
+            theme.COLOR_BUTTON_DANGER_HOVER,
         )
 
     def handle_events(self, event, mouse_pos):
@@ -235,11 +253,9 @@ class EndlessRunConfirmation:
         return None
 
     def draw(self, surface):
-        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))
-        surface.blit(overlay, (0, 0))
+        theme.draw_modal_overlay(surface, self.width, self.height)
 
-        prompt_surf = self.font_large.render("Do you want to start an endless run?", True, self.text_color)
+        prompt_surf = self.font_headline.render("Do you want to start an endless run?", True, self.text_color)
         prompt_rect = prompt_surf.get_rect(center=(self.width // 2, 150))
         surface.blit(prompt_surf, prompt_rect)
 
@@ -253,61 +269,64 @@ class PauseMenu:
     def __init__(self, screen_width, screen_height):
         self.width = screen_width
         self.height = screen_height
-        self.font_large = pygame.font.Font(None, 64)
-        self.font_medium = pygame.font.Font(None, 36)
-        self.font_small = pygame.font.Font(None, 20)
+        self.font_headline = pygame.font.Font(None, theme.FONT_HEADLINE)
+        self.font_large = pygame.font.Font(None, theme.FONT_LARGE)
+        self.font_tiny = pygame.font.Font(None, theme.FONT_TINY)
 
         self.confirming_quit = False
         self.pending_slot_selection = None
 
-        self.bg_color = (40, 40, 40)
-        self.btn_color = (80, 80, 80)
-        self.btn_hover = (120, 120, 120)
-        self.text_color = (255, 255, 255)
+        self.bg_color = theme.COLOR_PANEL
+        self.btn_color = theme.COLOR_BUTTON
+        self.btn_hover = theme.COLOR_BUTTON_HOVER
+        self.text_color = theme.COLOR_TEXT
 
-        btn_w, btn_h = 200, 50
-        center_x = self.width // 2 - btn_w // 2
+        button_x = (self.width - theme.BUTTON_WIDTH) // 2
+        resume_y = 200
+        quit_y = resume_y + theme.BUTTON_HEIGHT + theme.BUTTON_SPACING
 
         self.btn_resume = UIButton(
-            center_x,
-            200,
-            btn_w,
-            btn_h,
+            button_x,
+            resume_y,
+            theme.BUTTON_WIDTH,
+            theme.BUTTON_HEIGHT,
             "Resume",
-            self.font_medium,
+            self.font_large,
             self.btn_color,
             self.btn_hover,
         )
         self.btn_quit = UIButton(
-            center_x,
-            270,
-            btn_w,
-            btn_h,
+            button_x,
+            quit_y,
+            theme.BUTTON_WIDTH,
+            theme.BUTTON_HEIGHT,
             "Quit to Menu",
-            self.font_medium,
+            self.font_large,
             self.btn_color,
-            (200, 50, 50),
+            theme.COLOR_BUTTON_DANGER_HOVER,
         )
 
+        yes_rect, no_rect = theme.confirm_button_positions(self.width // 2, 270)
+
         self.btn_yes = UIButton(
-            center_x - 110,
-            270,
-            100,
-            50,
+            yes_rect.x,
+            yes_rect.y,
+            yes_rect.width,
+            yes_rect.height,
             "Yes",
-            self.font_medium,
+            self.font_large,
             self.btn_color,
-            (50, 200, 50),
+            theme.COLOR_BUTTON_CONFIRM_HOVER,
         )
         self.btn_no = UIButton(
-            center_x + 10,
-            270,
-            100,
-            50,
+            no_rect.x,
+            no_rect.y,
+            no_rect.width,
+            no_rect.height,
             "No",
-            self.font_medium,
+            self.font_large,
             self.btn_color,
-            (200, 50, 50),
+            theme.COLOR_BUTTON_DANGER_HOVER,
         )
 
     def inventory_slot_rects(self, screen_width=None, screen_height=None):
@@ -364,19 +383,17 @@ class PauseMenu:
         return None
 
     def draw(self, surface, inventory=None):
-        overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-        overlay.fill((0, 0, 0, 180))
-        surface.blit(overlay, (0, 0))
+        theme.draw_modal_overlay(surface, self.width, self.height)
 
         if not self.confirming_quit:
-            title_surf = self.font_large.render("PAUSED", True, self.text_color)
+            title_surf = self.font_headline.render("PAUSED", True, self.text_color)
             title_rect = title_surf.get_rect(center=(self.width // 2, 120))
             surface.blit(title_surf, title_rect)
 
             self.btn_resume.draw(surface)
             self.btn_quit.draw(surface)
         else:
-            prompt_surf = self.font_large.render("Are you sure?", True, self.text_color)
+            prompt_surf = self.font_headline.render("Are you sure?", True, self.text_color)
             prompt_rect = prompt_surf.get_rect(center=(self.width // 2, 150))
             surface.blit(prompt_surf, prompt_rect)
 
@@ -403,8 +420,8 @@ class PauseMenu:
             item = inventory[index]
             if item:
                 text = "O₂" if item == "oxygen_tank" else "HP" if item == "med_kit" else item[:2].upper()
-                label = self.font_small.render(text, True, self.text_color)
+                label = self.font_tiny.render(text, True, self.text_color)
                 surface.blit(label, label.get_rect(center=rect.center))
 
             if self.pending_slot_selection == index:
-                pygame.draw.circle(surface, (180, 120, 60), (x, start_y), slot_radius, 2)
+                pygame.draw.circle(surface, theme.COLOR_ACCENT, (x, start_y), slot_radius, 2)

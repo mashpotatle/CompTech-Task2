@@ -7,7 +7,7 @@ import math
 import pygame
 
 
-def create_spiky_plant_sprite(radius: float = 24.0) -> pygame.Surface:
+def create_spiky_plant_sprite(radius: float = 60.0) -> pygame.Surface:
     """Create a clustered spiky plant marker for cave hazards."""
     size = int(radius * 2 + 18)
     surface = pygame.Surface((size, size), pygame.SRCALPHA)
