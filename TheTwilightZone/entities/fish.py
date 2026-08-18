@@ -10,6 +10,8 @@ from __future__ import annotations
 import math
 import pygame
 
+from assets.fish_model import create_fish_sprite
+
 
 class Fish(pygame.sprite.Sprite):
     """
@@ -45,38 +47,7 @@ class Fish(pygame.sprite.Sprite):
         # Visual
         # --------------------------------------------------------------
 
-        # Temporary pixel-art style fish.
-        # Replace this surface with the final sprite later.
-        self.image = pygame.Surface(
-            (32, 20),
-            pygame.SRCALPHA,
-        )
-
-        # Body
-        pygame.draw.ellipse(
-            self.image,
-            (70, 200, 160),
-            pygame.Rect(5, 3, 22, 14),
-        )
-
-        # Tail
-        pygame.draw.polygon(
-            self.image,
-            (50, 160, 135),
-            [
-                (7, 10),
-                (0, 3),
-                (0, 17),
-            ],
-        )
-
-        # Eye
-        pygame.draw.circle(
-            self.image,
-            (10, 20, 20),
-            (23, 7),
-            2,
-        )
+        self.image = create_fish_sprite(32, 20)
 
         self.rect = self.image.get_rect(
             center=(

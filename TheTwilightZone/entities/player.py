@@ -8,6 +8,7 @@ will be added in later development stages.
 
 import pygame
 
+from assets.player_model import create_player_sprite
 from settings import SCREEN_HEIGHT, SCREEN_WIDTH, PLAYER_WIDTH, PLAYER_HEIGHT
 from systems.collision import CollisionSystem
 import math
@@ -65,6 +66,8 @@ class Player:
         self.wobble_strength = 0.0
         self.wobble_timer = 0.0
         self._wobble_time = 0.0
+
+        self.sprite = create_player_sprite(self.rect.width, self.rect.height)
 
     def handle_input(self):
         """
@@ -239,12 +242,14 @@ class Player:
             round(screen_position.y + wobble_offset_y),
         )
 
-        # Temporary player representation.
-        pygame.draw.rect(
-            screen,
-            (40, 180, 220),
-            screen_rect,
-        )
+        sprite = pygame.transform.rotate(self.sprite, 0)
+        if self.velocity.length_squared() > 0:
+            angle = math.degrees(math.atan2(self.velocity.y, self.velocity.x))
+            if self.velocity.x != 0 or self.velocity.y != 0:
+                sprite = pygame.transform.rotate(self.sprite, -angle)
+
+        sprite_rect = sprite.get_rect(center=screen_rect.center)
+        screen.blit(sprite, sprite_rect)
 
     def apply_damage(self, amount: int) -> None:
         """Reduce player health by `amount` and clamp at zero."""

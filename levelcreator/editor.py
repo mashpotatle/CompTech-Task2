@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from pathlib import Path
 from typing import Any
 import logging
@@ -41,6 +42,7 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
 )
 logger = logging.getLogger("twilightzone.levelcreator")
+SECTION_FILENAME_RE = re.compile(r"^section_(\d+)\.json$")
 
 
 class LevelEditor:
@@ -389,6 +391,8 @@ class LevelEditor:
             props["direction"] = [1.0, 0.0]
         elif element_type == "current":
             props["direction"] = [1.0, 0.0]
+        elif element_type == "thermal_vent":
+            props["direction"] = [1.0, 0.0]
 
         e = Element(
             self.next_id(element_type),
@@ -597,7 +601,7 @@ class LevelEditor:
         if not self.selected:
             return
         e = self.selected
-        if e.element_type in ("fish_spawn", "current"):
+        if e.element_type in ("fish_spawn", "current", "thermal_vent"):
             self.commit()
             d = e.properties.get("direction", [1.0, 0.0])
             e.properties["direction"] = [-float(d[1]), float(d[0])]
@@ -625,19 +629,50 @@ class LevelEditor:
         self.fit_level()
         self.set_status("New unsaved level created.")
 
-    def save_level(self) -> None:
+    def selector_level_files(self) -> list[Path]:
+        return sorted(DATA_DIR.glob("*.json"))
+
+    def is_current_file_active_in_selector(self) -> bool:
         if self.current_file is None:
+            return False
+        return any(path == self.current_file for path in self.selector_level_files())
+
+    def next_available_section_path(self) -> Path:
+        used_numbers: set[int] = set()
+        for path in self.selector_level_files():
+            match = SECTION_FILENAME_RE.match(path.name)
+            if match:
+                used_numbers.add(int(match.group(1)))
+
+        next_number = 1
+        while next_number in used_numbers:
+            next_number += 1
+
+        return DATA_DIR / f"section_{next_number:02d}.json"
+
+    def save_level(self, assign_new_if_inactive: bool = True) -> None:
+        created_new_slot = False
+        if assign_new_if_inactive and not self.is_current_file_active_in_selector():
+            self.current_file = self.next_available_section_path()
+            self.level.level_id = self.current_file.stem
+            self.level.name = self.level.name or self.level.level_id
+            created_new_slot = True
+        elif self.current_file is None:
             self.current_file = DATA_DIR / f"{self.level.level_id}.json"
+
         errors = self.level.validate()
         if errors:
             self.set_status(f"Cannot save: {errors[0]}", error=True)
             return
         self.level.save(self.current_file)
         logger.info("Saved level id=%s path=%s elements=%d", self.level.level_id, self.current_file, len(self.level.elements))
-        self.set_status(f"Saved {self.current_file.name}.")
+        if created_new_slot:
+            self.set_status(f"Saved new level {self.current_file.name}.")
+        else:
+            self.set_status(f"Saved {self.current_file.name}.")
 
     def open_level_dialog(self) -> None:
-        files = sorted(DATA_DIR.glob("*.json"))
+        files = self.selector_level_files()
         if not files:
             self.set_status("No JSON levels found in levelcreator/levels.", error=True)
             return
@@ -684,7 +719,7 @@ class LevelEditor:
             y += 34
 
         # File list occupies the right column only.
-        for i, path in enumerate(sorted(DATA_DIR.glob("*.json"))[:8]):
+        for i, path in enumerate(self.selector_level_files()[:8]):
             button = pygame.Rect(rect.left + 160, rect.top + 42 + i * 27, 158, 24)
             if button.collidepoint(pos):
                 self.open_level(path)
@@ -740,7 +775,7 @@ class LevelEditor:
             self.level.name = self.level.name or self.level.level_id
             self.typing_field = None
             self.typing_value = ""
-            self.save_level()
+            self.save_level(assign_new_if_inactive=False)
             return
 
         if not self.selected or self.typing_field is None:
@@ -848,6 +883,7 @@ class LevelEditor:
             if e.element_type == "thermal_vent":
                 heat = float(e.properties.get("heat_radius", 100)) * self.zoom
                 pygame.draw.circle(self.screen, (*colour, 80), (round(center.x), round(center.y)), max(4, round(heat)), 1)
+                self.draw_thermal_vent_preview(e, center, colour)
 
         if e is self.selected:
             self.draw_selection(e)
@@ -862,6 +898,62 @@ class LevelEditor:
         else:
             p = self.world_to_screen(pygame.Vector2(e.x, e.y))
             pygame.draw.circle(self.screen, WHITE, (round(p.x), round(p.y)), 10, 2)
+
+    def draw_thermal_vent_preview(
+        self,
+        e: Element,
+        center: pygame.Vector2,
+        colour: tuple[int, int, int],
+    ) -> None:
+        direction = pygame.Vector2(e.properties.get("direction", [1.0, 0.0]))
+        if direction.length_squared() == 0:
+            direction = pygame.Vector2(1.0, 0.0)
+        else:
+            direction = direction.normalize()
+
+        side = pygame.Vector2(-direction.y, direction.x)
+        haze_length = max(18.0, float(e.properties.get("haze_length", 95.0)) * self.zoom)
+        haze_width = max(8.0, float(e.properties.get("haze_width", 30.0)) * self.zoom)
+
+        layers = 5
+        for i in range(layers):
+            t = (i + 1) / layers
+            layer_center = center + direction * (haze_length * t * 0.55)
+            half_width = haze_width * (1.0 - t * 0.55)
+            half_len = haze_length * (0.14 + t * 0.1)
+            polygon = [
+                layer_center - direction * half_len + side * half_width,
+                layer_center + direction * half_len + side * (half_width * 0.58),
+                layer_center + direction * half_len - side * (half_width * 0.58),
+                layer_center - direction * half_len - side * half_width,
+            ]
+            alpha = max(14, 65 - i * 10)
+            haze_surface = pygame.Surface(self.screen.get_size(), pygame.SRCALPHA)
+            pygame.draw.polygon(
+                haze_surface,
+                (255, 92, 70, alpha),
+                [(round(p.x), round(p.y)) for p in polygon],
+            )
+            self.screen.blit(haze_surface, (0, 0))
+
+        bubble_count = max(4, int(e.properties.get("bubble_count", 14)))
+        bubble_spread = max(2.0, float(e.properties.get("bubble_spread", 15.0)) * self.zoom)
+        for i in range(bubble_count):
+            t = (i + 1) / (bubble_count + 1)
+            lateral = ((i % 2) * 2 - 1) * bubble_spread * (0.35 + (i % 3) * 0.2)
+            bubble_pos = center + direction * (haze_length * t) + side * lateral * (1.0 - t * 0.7)
+            bubble_radius = max(1, round((1.0 - t) * 3.0))
+            alpha = max(30, round(210 * (1.0 - t)))
+            pygame.draw.circle(
+                self.screen,
+                (255, 212, 195, alpha),
+                (round(bubble_pos.x), round(bubble_pos.y)),
+                bubble_radius,
+            )
+
+        end = center + direction * (haze_length * 0.75)
+        pygame.draw.line(self.screen, WHITE, center, end, 2)
+        self.arrowhead(center, end, WHITE)
 
     def draw_entry_exit(self) -> None:
         for label, x, y, colour, direction in (
@@ -907,7 +999,7 @@ class LevelEditor:
 
         # File list
         self.text("LEVEL FILES", (r.left+170, r.top+12), self.font, TEXT)
-        files = sorted(DATA_DIR.glob("*.json"))
+        files = self.selector_level_files()
         for i, path in enumerate(files[:8]):
             by = r.top + 42 + i * 27
             button = pygame.Rect(r.left+160, by, 158, 24)
@@ -942,7 +1034,7 @@ class LevelEditor:
         self.text("FILE", (r.left+12, bottom), self.font, TEXT)
         self.text("Ctrl+S save   Ctrl+O open   Ctrl+N new", (r.left+12, bottom+24), self.small, MUTED)
         self.text("Delete selected   R rotate   F fit view", (r.left+12, bottom+44), self.small, MUTED)
-        self.text("Walls are clipped to bounds on creation", (r.left+12, bottom+60), self.small, MUTED)
+        self.text("Build thermal vent structures with wall tool", (r.left+12, bottom+60), self.small, MUTED)
 
     def draw_statusbar(self) -> None:
         y = self.screen.get_height() - STATUSBAR

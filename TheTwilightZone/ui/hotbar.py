@@ -54,5 +54,10 @@ class Hotbar:
 
             item = items[index]
             if item:
-                label = self.font.render(str(item), True, self.text_color)
+                text = item
+                if text == "oxygen_tank":
+                    text = "O₂"
+                elif text == "med_kit":
+                    text = "HP"
+                label = self.font.render(str(text), True, self.text_color)
                 surface.blit(label, label.get_rect(center=rect.center))

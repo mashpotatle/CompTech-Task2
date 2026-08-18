@@ -10,6 +10,8 @@ from __future__ import annotations
 import math
 import pygame
 
+from assets.spiky_plant_model import create_spiky_plant_sprite
+
 
 class SpikyPlant(pygame.sprite.Sprite):
     """Stationary damaging cave flora."""
@@ -32,63 +34,10 @@ class SpikyPlant(pygame.sprite.Sprite):
         self.damage_cooldown = 0.75
         self.damage_timer = 0.0
 
-        size = int(radius * 2 + 18)
-        self.image = pygame.Surface((size, size), pygame.SRCALPHA)
+        self.image = create_spiky_plant_sprite(float(radius))
 
+        size = self.image.get_width()
         centre = size // 2
-        body_radius = int(radius * 0.55)
-
-        # Plant body
-        pygame.draw.circle(
-            self.image,
-            (46, 140, 72),
-            (centre, centre),
-            body_radius,
-        )
-
-        # Dark outline
-        pygame.draw.circle(
-            self.image,
-            (20, 60, 32),
-            (centre, centre),
-            body_radius,
-            2,
-        )
-
-        # Spikes
-        spike_count = 12
-        for i in range(spike_count):
-            angle = (math.tau / spike_count) * i
-
-            inner = pygame.Vector2(
-                math.cos(angle),
-                math.sin(angle),
-            ) * body_radius
-
-            outer = pygame.Vector2(
-                math.cos(angle),
-                math.sin(angle),
-            ) * radius
-
-            left = pygame.Vector2(
-                math.cos(angle + 0.18),
-                math.sin(angle + 0.18),
-            ) * (body_radius * 0.85)
-
-            right = pygame.Vector2(
-                math.cos(angle - 0.18),
-                math.sin(angle - 0.18),
-            ) * (body_radius * 0.85)
-
-            pygame.draw.polygon(
-                self.image,
-                (95, 220, 120),
-                [
-                    (centre + left.x, centre + left.y),
-                    (centre + outer.x, centre + outer.y),
-                    (centre + right.x, centre + right.y),
-                ],
-            )
 
         self.rect = self.image.get_rect(
             center=(

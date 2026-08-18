@@ -248,15 +248,17 @@ class EndlessRunConfirmation:
 
 
 class PauseMenu:
-    """A lightweight pause overlay with resume and quit confirmation actions."""
+    """A pause overlay with a visible 5-slot hotbar and quit confirmation."""
 
     def __init__(self, screen_width, screen_height):
         self.width = screen_width
         self.height = screen_height
         self.font_large = pygame.font.Font(None, 64)
         self.font_medium = pygame.font.Font(None, 36)
+        self.font_small = pygame.font.Font(None, 20)
 
         self.confirming_quit = False
+        self.pending_slot_selection = None
 
         self.bg_color = (40, 40, 40)
         self.btn_color = (80, 80, 80)
@@ -308,10 +310,40 @@ class PauseMenu:
             (200, 50, 50),
         )
 
-    def handle_events(self, event, mouse_pos):
+    def inventory_slot_rects(self, screen_width=None, screen_height=None):
+        screen_width = screen_width or self.width
+        screen_height = screen_height or self.height
+        slot_radius = 30
+        spacing = 20
+        total_width = (slot_radius * 2 * 5) + (spacing * 4)
+        start_x = (screen_width // 2) - (total_width // 2) + slot_radius
+        start_y = screen_height - 100
+
+        rects = []
+        for index in range(5):
+            x = start_x + (index * (slot_radius * 2 + spacing))
+            rects.append(pygame.Rect(x - slot_radius, start_y - slot_radius, slot_radius * 2, slot_radius * 2))
+        return rects
+
+    def handle_events(self, event, mouse_pos, inventory=None):
         if not self.confirming_quit:
             self.btn_resume.check_hover(mouse_pos)
             self.btn_quit.check_hover(mouse_pos)
+            if inventory is not None:
+                for index, rect in enumerate(self.inventory_slot_rects()):
+                    if rect.collidepoint(mouse_pos):
+                        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                            if pygame.key.get_mods() & pygame.KMOD_SHIFT:
+                                if self.pending_slot_selection is None:
+                                    self.pending_slot_selection = index
+                                else:
+                                    first = self.pending_slot_selection
+                                    second = index
+                                    self.pending_slot_selection = None
+                                    return ("SWAP_SLOTS", (first, second))
+                            else:
+                                self.pending_slot_selection = None
+                                return ("SELECT_SLOT", index)
         else:
             self.btn_yes.check_hover(mouse_pos)
             self.btn_no.check_hover(mouse_pos)
@@ -331,7 +363,7 @@ class PauseMenu:
 
         return None
 
-    def draw(self, surface):
+    def draw(self, surface, inventory=None):
         overlay = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 180))
         surface.blit(overlay, (0, 0))
@@ -351,16 +383,28 @@ class PauseMenu:
             self.btn_yes.draw(surface)
             self.btn_no.draw(surface)
 
-        self._draw_inventory_placeholders(surface)
+        self._draw_inventory(surface, inventory)
 
-    def _draw_inventory_placeholders(self, surface):
+    def _draw_inventory(self, surface, inventory):
         slot_radius = 30
         spacing = 20
         total_width = (slot_radius * 2 * 5) + (spacing * 4)
         start_x = (self.width // 2) - (total_width // 2) + slot_radius
         start_y = self.height - 100
 
+        inventory = list(inventory) if inventory is not None else [None] * 5
+
         for index in range(5):
             x = start_x + (index * (slot_radius * 2 + spacing))
+            rect = pygame.Rect(x - slot_radius, start_y - slot_radius, slot_radius * 2, slot_radius * 2)
             pygame.draw.circle(surface, (200, 200, 200), (x, start_y), slot_radius, 3)
             pygame.draw.circle(surface, (50, 50, 50), (x, start_y), slot_radius - 3)
+
+            item = inventory[index]
+            if item:
+                text = "O₂" if item == "oxygen_tank" else "HP" if item == "med_kit" else item[:2].upper()
+                label = self.font_small.render(text, True, self.text_color)
+                surface.blit(label, label.get_rect(center=rect.center))
+
+            if self.pending_slot_selection == index:
+                pygame.draw.circle(surface, (180, 120, 60), (x, start_y), slot_radius, 2)
