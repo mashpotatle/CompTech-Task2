@@ -8,8 +8,6 @@ The Game class coordinates the major game systems but does not own
 the level data itself. Level data is managed by LevelManager.
 """
 
-from pathlib import Path
-
 import pygame
 import random
 
@@ -37,6 +35,7 @@ from settings import (
     TARGET_FPS,
     WINDOW_TITLE,
 )
+from paths import CAVE_SECTIONS_DIR
 
 
 class Game:
@@ -130,25 +129,7 @@ class Game:
         # Project paths
         # ----------------------------------------------------------
 
-        # Determine the root directory of the game project.
-        #
-        # __file__ is:
-        # TheTwilightZone/game/game.py
-        #
-        # parent        -> game/
-        # parent.parent -> TheTwilightZone/
-        project_root = (
-            Path(__file__)
-            .resolve()
-            .parent
-            .parent
-        )
-
-        self.level_data_directory = (
-            project_root
-            / "data"
-            / "cave_sections"
-            )
+        self.level_data_directory = CAVE_SECTIONS_DIR
 
         # ----------------------------------------------------------
         # Camera

@@ -1,0 +1,36 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Install pygame in .venv",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["-m", "pip", "install", "pygame-ce"]
+    },
+    {
+      "label": "Run TheTwilightZone",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["main.py"],
+      "options": {
+        "cwd": "${workspaceFolder}/TheTwilightZone"
+      },
+      "group": "build"
+    },
+    {
+      "label": "Run Level Creator",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["main.py"],
+      "options": {
+        "cwd": "${workspaceFolder}/levelcreator"
+      }
+    },
+    {
+      "label": "Run UI Creator",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["uicreator/main.py"]
+    }
+  ]
+}

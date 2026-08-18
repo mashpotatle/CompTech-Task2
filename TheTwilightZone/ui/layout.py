@@ -9,12 +9,12 @@ guessing pixel numbers in code.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
 import pygame
+from paths import UI_LAYOUT_DIR
 
-DATA_DIR = (Path(__file__).resolve().parents[1] / "data" / "ui").resolve()
+DATA_DIR = UI_LAYOUT_DIR
 
 
 class Layout:

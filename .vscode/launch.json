@@ -1,0 +1,32 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run TheTwilightZone",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/TheTwilightZone/main.py",
+      "cwd": "${workspaceFolder}/TheTwilightZone",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Run Level Creator",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/levelcreator/main.py",
+      "cwd": "${workspaceFolder}/levelcreator",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Run UI Creator",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/uicreator/main.py",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}
