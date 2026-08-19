@@ -880,12 +880,9 @@ class Game:
             return
 
         exit_position = (
-            self.level_manager.get_last_exit_position(
-            )
+            current_instance.world_offset
+            + current_instance.section.exit_position
         )
-
-        if exit_position is None:
-            return
 
         distance_to_exit = (
             self.player.position.distance_to(

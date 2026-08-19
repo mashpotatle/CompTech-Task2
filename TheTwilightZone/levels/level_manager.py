@@ -227,6 +227,36 @@ class LevelManager:
                 next_filename
             )
 
+    def _prune_old_sections(self) -> None:
+        """
+        Remove sections that are now behind the player by more than one
+        section. Once the player is one section ahead of a section, that
+        older section is considered safe to discard and cannot be revisited.
+        """
+
+        if not self.sections:
+            return
+
+        if not (
+            0
+            <= self.current_section_index
+            < len(self.sections)
+        ):
+            return
+
+        keep_from = self.current_section_index - 1
+        if keep_from < 0:
+            keep_from = 0
+
+        if len(self.sections) <= 1:
+            return
+
+        self.sections = self.sections[keep_from:]
+        self.current_section_index = min(
+            self.current_section_index - keep_from,
+            len(self.sections) - 1,
+        )
+
     # ==================================================================
     # RANDOM SECTION SELECTION
     # ==================================================================
@@ -601,6 +631,7 @@ class LevelManager:
                     index
                 )
 
+                self._prune_old_sections()
                 self._preload_following_sections()
 
                 return index
@@ -693,6 +724,7 @@ class LevelManager:
             len(self.sections) - 1
         )
 
+        self._prune_old_sections()
         self._preload_following_sections()
 
         return next_instance
