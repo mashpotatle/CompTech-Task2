@@ -40,24 +40,31 @@ class Player:
         # Movement speed is measured in pixels per second.
         self.speed = 250
 
-        # Tall side-on hitbox to match the diver silhouette.
+        # Keep visual sprite dimensions separate from collision dimensions.
         self.width = PLAYER_WIDTH
         self.height = PLAYER_HEIGHT
+        self.collision_base_width = max(1, round(self.width / 1.5))
+        self.collision_base_height = max(1, round(self.height / 1.5))
         self.facing = 1
+        self.pitch_input = 0
+        self.max_pitch_degrees = 18
+        self.hitbox_max_pitch_degrees = 90
 
         # Create a rectangular hitbox centred around the player's
         # position. This will later be used for collision detection.
         self.rect = pygame.Rect(
             0,
             0,
-            self.width,
-            self.height,
+            self.collision_base_width,
+            self.collision_base_height,
         )
 
         self.rect.center = (
             round(self.position.x),
             round(self.position.y)
         )
+
+        self._update_collision_rect_dimensions()
 
         # Health (temporary). A simple integer health pool for
         # environmental damage and entity attacks.
@@ -70,7 +77,7 @@ class Player:
         self.wobble_timer = 0.0
         self._wobble_time = 0.0
 
-        self.sprite = create_player_sprite(self.rect.width, self.rect.height)
+        self.sprite = create_player_sprite(self.width, self.height)
 
     def handle_input(self):
         """
@@ -87,6 +94,7 @@ class Player:
 
         self.velocity.x = 0
         self.velocity.y = 0
+        self.pitch_input = 0
 
         # Horizontal movement.
         if keys[pygame.K_a] or keys[pygame.K_LEFT]:
@@ -98,15 +106,60 @@ class Player:
         # Vertical movement.
         if keys[pygame.K_w] or keys[pygame.K_UP]:
             self.velocity.y -= 1
+            self.pitch_input = -1
 
         if keys[pygame.K_s] or keys[pygame.K_DOWN]:
             self.velocity.y += 1
+            self.pitch_input = 1
 
         # Normalising prevents diagonal movement from being faster
         # than movement in a single direction.
         if self.velocity.length_squared() > 0:
             self.velocity = self.velocity.normalize()
             self.facing = 1 if self.velocity.x >= 0 else -1
+
+        self._update_collision_rect_dimensions()
+
+    def _get_pitch_angle(self) -> float:
+        """Return player pitch in degrees, corrected for facing direction."""
+
+        return -self.pitch_input * self.max_pitch_degrees * self.facing
+
+    def _get_hitbox_pitch_angle(self) -> float:
+        """Return hitbox pitch in degrees for collision shape projection."""
+
+        return self.pitch_input * self.hitbox_max_pitch_degrees
+
+    def _update_collision_rect_dimensions(self) -> None:
+        """Resize collision rect to match pitched hitbox projection."""
+
+        angle = math.radians(abs(self._get_hitbox_pitch_angle()))
+        cos_angle = abs(math.cos(angle))
+        sin_angle = abs(math.sin(angle))
+
+        rotated_width = max(
+            1,
+            round(
+                self.collision_base_width * cos_angle
+                + self.collision_base_height * sin_angle
+            ),
+        )
+        rotated_height = max(
+            1,
+            round(
+                self.collision_base_width * sin_angle
+                + self.collision_base_height * cos_angle
+            ),
+        )
+
+        self.rect.size = (
+            rotated_width,
+            rotated_height,
+        )
+        self.rect.center = (
+            round(self.position.x),
+            round(self.position.y),
+        )
 
     def update(self, delta_time, collision_system):
         """
@@ -126,6 +179,8 @@ class Player:
             * self.speed
             * delta_time
         )
+
+        self._update_collision_rect_dimensions()
 
         # ---------------------------------------------------------------
         # Horizontal Movement
@@ -229,8 +284,8 @@ class Player:
         screen_rect = pygame.Rect(
             0,
             0,
-            self.rect.width,
-            self.rect.height,
+            self.width,
+            self.height,
         )
 
         # Centre the visual representation on the player's screen position.
@@ -249,6 +304,10 @@ class Player:
         sprite = self.sprite
         if self.facing < 0:
             sprite = pygame.transform.flip(self.sprite, True, False)
+
+        pitch_angle = self._get_pitch_angle()
+        if pitch_angle != 0:
+            sprite = pygame.transform.rotate(sprite, pitch_angle)
 
         sprite_rect = sprite.get_rect(center=screen_rect.center)
         screen.blit(sprite, sprite_rect)

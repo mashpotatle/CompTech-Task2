@@ -137,6 +137,15 @@ class ThermalVent(pygame.sprite.Sprite):
                 ring_radius,
             )
 
+    def get_eruption_intensity(self) -> float:
+        """Return a 0..1 pulse value representing how strongly the vent is actively erupting."""
+        if not self.is_erupting or self.eruption_duration <= 0.0:
+            return 0.0
+
+        phase = (self._eruption_timer - self.eruption_interval) / self.eruption_duration
+        phase = max(0.0, min(1.0, phase))
+        return max(0.0, 1.0 - abs((phase * 2.0) - 1.0))
+
     def _draw_visual(self) -> None:
         self.image.fill((0, 0, 0, 0))
 
@@ -147,17 +156,41 @@ class ThermalVent(pygame.sprite.Sprite):
 
         center = pygame.Vector2(self.image.get_width() / 2, self.image.get_height() / 2)
         side = pygame.Vector2(-self.direction.y, self.direction.x)
+        eruption_intensity = self.get_eruption_intensity()
 
         plume_length = max(self.haze_length, self.radius * 2.5, 50.0)
+        plume_width = max(self.haze_width, self.radius * 1.2, 18.0)
+
+        if eruption_intensity > 0.0:
+            pulse_length = plume_length * (0.8 + eruption_intensity * 0.55)
+            pulse_width = plume_width * (0.75 + eruption_intensity * 0.95)
+            pulse_steps = 16
+            for i in range(pulse_steps):
+                t = i / pulse_steps
+                start = center + self.direction * (plume_length * (0.12 + t * 0.34))
+                end = center + self.direction * (pulse_length * (0.3 + t * 0.9))
+                half_width = pulse_width * (0.12 + (1.0 - t) * 0.75)
+                polygon = [
+                    start - side * half_width,
+                    end + side * half_width * 0.75,
+                    end - side * half_width * 0.75,
+                    start + side * half_width,
+                ]
+                alpha = int(35 + eruption_intensity * 165 * (1.0 - t))
+                pygame.draw.polygon(self.image, (255, 166, 66, alpha), [(p.x, p.y) for p in polygon])
+
+            core_radius = max(4, int(self.radius * (1.0 + eruption_intensity * 1.4)))
+            core_alpha = int(120 + eruption_intensity * 110)
+            pygame.draw.circle(self.image, (255, 234, 145, core_alpha), (round(center.x), round(center.y)), core_radius)
 
         # Fine bubbles stream away from the vent in a single narrow line.
         for i in range(max(8, self.bubble_count)):
             t = (self._animation_time + i / max(1, self.bubble_count)) % 1.0
             bubble_distance = plume_length * (0.12 + t * 0.88)
-            wobble = math.sin((t * 16.0 + i * 0.8) * math.tau) * self.bubble_spread * 0.25
+            wobble = math.sin((t * 16.0 + i * 0.8) * math.tau) * self.bubble_spread * (0.35 + eruption_intensity * 0.85)
             bubble_pos = center + self.direction * bubble_distance + side * wobble
-            bubble_radius = max(1, int(2.0 * (1.0 - t * 0.65)))
-            bubble_alpha = max(25, int(180 * (1.0 - t)))
+            bubble_radius = max(1, int((2.0 + eruption_intensity * 2.8) * (1.0 - t * 0.65)))
+            bubble_alpha = max(25, int((180 + eruption_intensity * 70) * (1.0 - t)))
             pygame.draw.circle(
                 self.image,
                 (255, 238, 190, bubble_alpha),
@@ -166,7 +199,9 @@ class ThermalVent(pygame.sprite.Sprite):
             )
 
         # Tiny vent mouth for the source point.
-        pygame.draw.circle(self.image, (255, 208, 112, 220), (round(center.x), round(center.y)), max(2, int(self.radius * 0.35)))
+        mouth_radius = max(2, int(self.radius * (0.35 + eruption_intensity * 0.55)))
+        mouth_alpha = int(180 + eruption_intensity * 55)
+        pygame.draw.circle(self.image, (255, 208, 112, mouth_alpha), (round(center.x), round(center.y)), mouth_radius)
 
     def draw(self, screen: pygame.Surface, camera=None) -> None:
         """Draw the vent."""

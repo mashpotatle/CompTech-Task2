@@ -23,8 +23,8 @@ SCREEN_HEIGHT = 768
 WINDOW_TITLE = "The Twilight Zone"
 
 ASSET_SCALE = 2.5
-PLAYER_WIDTH = 70
-PLAYER_HEIGHT = 110
+PLAYER_WIDTH = 113
+PLAYER_HEIGHT = 61
 
 # ---------------------------------------------------------------------------
 # Performance Settings

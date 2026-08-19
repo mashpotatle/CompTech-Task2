@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import random
 from pathlib import Path
 
 import pygame
@@ -116,15 +117,22 @@ class LevelLoader:
             )
         ]
 
+        properties = dict(
+            data.get(
+                "properties",
+                {}
+            )
+        )
+
+        if data.get("type") == "item":
+            properties["rotation"] = random.uniform(0.0, 360.0)
+
         return LevelElement(
             element_id=data["id"],
             element_type=data["type"],
             position=position,
             points=points,
-            properties=data.get(
-                "properties",
-                {}
-            ),
+            properties=properties,
             material=data.get(
                 "material",
                 {}

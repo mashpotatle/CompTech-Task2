@@ -57,8 +57,8 @@ ENTITY_DEFINITIONS: dict[str, dict[str, Any]] = {
         "fields": {
             "radius": ("float", 26.0),
             "heat_radius": ("float", 100.0),
-            "heat_damage": ("int", 5),
-            "eruption_damage": ("int", 20),
+            "heat_damage": ("float", 5.0),
+            "eruption_damage": ("float", 20.0),
             "eruption_duration": ("float", 1.0),
             "eruption_interval": ("float", 5.0),
             "haze_length": ("float", 95.0),

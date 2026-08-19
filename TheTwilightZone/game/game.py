@@ -10,6 +10,7 @@ the level data itself. Level data is managed by LevelManager.
 
 import math
 import random
+from pathlib import Path
 
 import pygame
 from pygame import mixer
@@ -35,7 +36,6 @@ from entities.thermal_vent import ThermalVent
 from entities.current import Current
 
 from settings import (
-    DEBUG_COLLISION,
     DEBUG_MODE,
     DEBUG_PLAYER_COLLISION,
     SCREEN_HEIGHT,
@@ -46,6 +46,13 @@ from settings import (
     save_settings,
 )
 from paths import CAVE_SECTIONS_DIR
+
+
+WALL_TEXTURE_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "assets"
+    / "cave_wall.png"
+)
 
 
 class Game:
@@ -97,6 +104,16 @@ class Game:
         pygame.display.set_caption(
             WINDOW_TITLE
         )
+
+        self.wall_texture = self._load_wall_texture()
+        self.wall_polygon_cache: dict[str, tuple[pygame.Surface, int, int]] = {}
+        self.item_sprites = {
+            "oxygen_tank": create_oxygen_tank_sprite(70, 70),
+            "med_kit": create_med_kit_sprite(70, 70),
+        }
+        self.overlay_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        self.debug_font_small = pygame.font.Font(None, 20)
+        self.debug_font_large = pygame.font.Font(None, 36)
 
         # ----------------------------------------------------------
         # Game clock
@@ -933,15 +950,6 @@ class Game:
             )
 
             # ------------------------------------------------------
-            # Draw player
-            # ------------------------------------------------------
-
-            self.player.draw(
-                self.screen,
-                self.camera,
-            )
-
-            # ------------------------------------------------------
             # Debug player collision rectangle
             # ------------------------------------------------------
 
@@ -997,34 +1005,29 @@ class Game:
 
         if self.damage_flash_timer > 0:
             alpha = int((self.damage_flash_timer / max(self.damage_flash_duration, 0.01)) * 120)
-            flash = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            flash.fill((*self.damage_flash_color, alpha))
-            self.screen.blit(flash, (0, 0))
+            self.overlay_surface.fill((*self.damage_flash_color, alpha))
+            self.screen.blit(self.overlay_surface, (0, 0))
 
         if self.oxygen_fade_timer > 0:
             fade_progress = 1.0 - (self.oxygen_fade_timer / max(self.oxygen_fade_duration, 0.01))
             fade_alpha = int(fade_progress * 220)
-            fade = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            fade.fill((0, 0, 0, fade_alpha))
-            self.screen.blit(fade, (0, 0))
+            self.overlay_surface.fill((0, 0, 0, fade_alpha))
+            self.screen.blit(self.overlay_surface, (0, 0))
 
         if self.silt_intensity > 0.05:
-            silt_overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
             alpha = int(self.silt_intensity * 180)
-            silt_overlay.fill((12, 22, 26, alpha))
-            self.screen.blit(silt_overlay, (0, 0))
+            self.overlay_surface.fill((12, 22, 26, alpha))
+            self.screen.blit(self.overlay_surface, (0, 0))
 
         if self.vent_heat_intensity > 0.05:
-            warmth = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
             alpha = int(self.vent_heat_intensity * 110)
-            warmth.fill((255, 120, 40, alpha))
-            self.screen.blit(warmth, (0, 0))
+            self.overlay_surface.fill((255, 120, 40, alpha))
+            self.screen.blit(self.overlay_surface, (0, 0))
 
         if self.low_oxygen_intensity > 0.05:
-            low_o2 = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
             alpha = int(self.low_oxygen_intensity * 80)
-            low_o2.fill((40, 120, 170, alpha))
-            self.screen.blit(low_o2, (0, 0))
+            self.overlay_surface.fill((40, 120, 170, alpha))
+            self.screen.blit(self.overlay_surface, (0, 0))
 
         if self.showing_endless_confirmation:
             self.endless_run_confirmation.draw(self.screen)
@@ -1089,49 +1092,124 @@ class Game:
         The camera then converts each point into screen coordinates.
         """
 
-        screen_points = [
-            self.camera.world_to_screen(
-                point
-            )
-            for point in element.get_world_points()
-        ]
+        world_points = element.get_world_points()
 
-        if len(screen_points) < 3:
+        if len(world_points) < 3:
             return
 
-        # ----------------------------------------------------------
-        # Temporary wall rendering
-        # ----------------------------------------------------------
+        cache_key = f"{element.element_id}:{round(element.position.x)}:{round(element.position.y)}"
 
-        # This will eventually be replaced by textured polygon
-        # rendering using the wall's material settings.
-        pygame.draw.polygon(
+        self._draw_tiled_polygon(
             self.screen,
-            (
-                70,
-                80,
-                85,
-            ),
-            screen_points,
+            world_points,
+            self.wall_texture,
+            cache_key,
         )
 
-        # ----------------------------------------------------------
-        # Debug wall outline
-        # ----------------------------------------------------------
+    def _load_wall_texture(self) -> pygame.Surface:
+        """Load the seamless cave wall texture used for tiled walls."""
 
-        if DEBUG_COLLISION:
+        return pygame.image.load(
+            str(WALL_TEXTURE_PATH)
+        ).convert_alpha()
 
-            pygame.draw.lines(
-                self.screen,
-                (
-                    120,
-                    130,
-                    135,
-                ),
-                True,
-                screen_points,
-                2,
+    def _draw_tiled_polygon(
+        self,
+        screen: pygame.Surface,
+        world_points: list[pygame.Vector2],
+        texture: pygame.Surface,
+        cache_key: str,
+    ) -> None:
+        """Tile a texture across a polygon and clip it to the polygon shape."""
+
+        cached = self.wall_polygon_cache.get(cache_key)
+
+        if cached is None:
+            min_x = math.floor(
+                min(point.x for point in world_points)
             )
+            min_y = math.floor(
+                min(point.y for point in world_points)
+            )
+            max_x = math.ceil(
+                max(point.x for point in world_points)
+            )
+            max_y = math.ceil(
+                max(point.y for point in world_points)
+            )
+
+            width = max(1, max_x - min_x)
+            height = max(1, max_y - min_y)
+
+            tiled_surface = pygame.Surface(
+                (width, height),
+                pygame.SRCALPHA,
+            )
+
+            tile_width, tile_height = texture.get_size()
+            start_x = math.floor(min_x / tile_width) * tile_width
+            start_y = math.floor(min_y / tile_height) * tile_height
+
+            for y in range(start_y, max_y + tile_height, tile_height):
+                for x in range(start_x, max_x + tile_width, tile_width):
+                    tiled_surface.blit(
+                        texture,
+                        (
+                            x - min_x,
+                            y - min_y,
+                        ),
+                    )
+
+            clip_surface = pygame.Surface(
+                (width, height),
+                pygame.SRCALPHA,
+            )
+
+            local_points = [
+                (
+                    point.x - min_x,
+                    point.y - min_y,
+                )
+                for point in world_points
+            ]
+
+            pygame.draw.polygon(
+                clip_surface,
+                (
+                    255,
+                    255,
+                    255,
+                    255,
+                ),
+                local_points,
+            )
+
+            tiled_surface.blit(
+                clip_surface,
+                (0, 0),
+                special_flags=pygame.BLEND_RGBA_MULT,
+            )
+
+            cached = (tiled_surface, min_x, min_y)
+            self.wall_polygon_cache[cache_key] = cached
+
+        tiled_surface, min_x, min_y = cached
+
+        screen_origin = self.camera.world_to_screen(pygame.Vector2(min_x, min_y))
+        destination_rect = tiled_surface.get_rect(
+            topleft=(
+                math.floor(screen_origin.x),
+                math.floor(screen_origin.y),
+            )
+        )
+
+        if not destination_rect.colliderect(self.screen.get_rect()):
+            return
+
+        screen.blit(
+            tiled_surface,
+            destination_rect,
+        )
 
     def draw_obstacle(
         self,
@@ -1163,20 +1241,6 @@ class Game:
             screen_points,
         )
 
-        if DEBUG_COLLISION:
-
-            pygame.draw.lines(
-                self.screen,
-                (
-                    130,
-                    140,
-                    145,
-                ),
-                True,
-                screen_points,
-                2,
-            )
-
     def draw_item(
         self,
         element: LevelElement,
@@ -1191,14 +1255,17 @@ class Game:
         radius = max(10, int(float(element.properties.get("pickup_radius", 18.0)) * 0.25))
 
         item_type = str(element.properties.get("item_type", "oxygen_tank"))
+        rotation = float(element.properties.get("rotation", 0.0))
         if item_type == "oxygen_tank":
-            sprite = create_oxygen_tank_sprite(70, 70)
-            sprite_rect = sprite.get_rect(center=(int(screen_position.x), int(screen_position.y)))
-            self.screen.blit(sprite, sprite_rect)
+            sprite = self.item_sprites["oxygen_tank"]
+            rotated_sprite = pygame.transform.rotate(sprite, rotation)
+            sprite_rect = rotated_sprite.get_rect(center=(int(screen_position.x), int(screen_position.y)))
+            self.screen.blit(rotated_sprite, sprite_rect)
         elif item_type == "med_kit":
-            sprite = create_med_kit_sprite(70, 70)
-            sprite_rect = sprite.get_rect(center=(int(screen_position.x), int(screen_position.y)))
-            self.screen.blit(sprite, sprite_rect)
+            sprite = self.item_sprites["med_kit"]
+            rotated_sprite = pygame.transform.rotate(sprite, rotation)
+            sprite_rect = rotated_sprite.get_rect(center=(int(screen_position.x), int(screen_position.y)))
+            self.screen.blit(rotated_sprite, sprite_rect)
         else:
             pygame.draw.circle(
                 self.screen,
@@ -1215,7 +1282,7 @@ class Game:
             )
 
         if DEBUG_MODE:
-            label = pygame.font.Font(None, 20).render(
+            label = self.debug_font_small.render(
                 element.element_id,
                 True,
                 (255, 255, 255),
@@ -1237,11 +1304,6 @@ class Game:
         Display temporary information useful during development.
         """
 
-        font = pygame.font.Font(
-            None,
-            36,
-        )
-
         debug_text = (
             f"State: {self.game_state.name} | "
             f"FPS: {self.clock.get_fps():.1f} | "
@@ -1249,7 +1311,7 @@ class Game:
             f"{len(self.level_manager.sections)}"
         )
 
-        text_surface = font.render(
+        text_surface = self.debug_font_large.render(
             debug_text,
             True,
             (
@@ -1523,6 +1585,7 @@ class Game:
                 "pickup_radius": 48.0,
                 "collected": False,
                 "in_inventory": False,
+                "rotation": random.uniform(0.0, 360.0),
             },
         )
 

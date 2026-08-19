@@ -39,3 +39,14 @@ def test_restart_starts_a_fresh_run_state():
     assert game.oxygen_system.current == game.oxygen_system.max_oxygen
     assert game.player.health == 100
     assert game.game_state == GameState.DEAD
+
+
+def test_player_uses_horizontal_diver_sprite_and_hitbox():
+    pygame.init()
+
+    from entities.player import Player
+
+    player = Player((0, 0))
+
+    assert player.sprite.get_size() == (player.rect.width, player.rect.height)
+    assert player.rect.width > player.rect.height

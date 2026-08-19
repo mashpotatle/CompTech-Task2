@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -32,6 +33,7 @@ GRID = (34, 47, 56)
 GRID_MAJOR = (47, 61, 71)
 
 DATA_DIR = (Path(__file__).resolve().parents[1] / "TheTwilightZone" / "data" / "cave_sections").resolve()
+WALL_TEXTURE_PATH = (Path(__file__).resolve().parents[1] / "TheTwilightZone" / "assets" / "cave_wall.png").resolve()
 LOG_DIR = Path(__file__).resolve().parent / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOG_DIR / "level_creator.log"
@@ -71,6 +73,7 @@ class LevelEditor:
         self.drag_origin_world = pygame.Vector2()
         self.drag_origin_element = pygame.Vector2()
         self.running = True
+        self.wall_texture = pygame.image.load(str(WALL_TEXTURE_PATH)).convert_alpha()
 
         self.status = "Ready"
         logger.info("Editor started; data_dir=%s", DATA_DIR)
@@ -869,8 +872,11 @@ class LevelEditor:
         if e.points:
             pts = [self.world_to_screen(pygame.Vector2(e.x+x, e.y+y)) for x, y in e.points]
             if len(pts) >= 3:
-                pygame.draw.polygon(self.screen, colour, [(p.x, p.y) for p in pts])
-                pygame.draw.lines(self.screen, WHITE if e is self.selected else colour, True, [(p.x, p.y) for p in pts], max(1, round(2*self.zoom)))
+                if e.element_type == "wall":
+                    self.draw_tiled_polygon(pts, self.wall_texture)
+                else:
+                    pygame.draw.polygon(self.screen, colour, [(p.x, p.y) for p in pts])
+                    pygame.draw.lines(self.screen, WHITE if e is self.selected else colour, True, [(p.x, p.y) for p in pts], max(1, round(2*self.zoom)))
         elif e.element_type == "current":
             w = float(e.properties.get("width", 260))
             h = float(e.properties.get("height", 120))
@@ -900,6 +906,30 @@ class LevelEditor:
 
         label_pos = self.world_to_screen(pygame.Vector2(e.x, e.y))
         self.text(e.element_id, (label_pos.x + 8, label_pos.y - 18), self.small, TEXT)
+
+    def draw_tiled_polygon(self, points: list[pygame.Vector2], texture: pygame.Surface) -> None:
+        min_x = math.floor(min(point.x for point in points))
+        min_y = math.floor(min(point.y for point in points))
+        max_x = math.ceil(max(point.x for point in points))
+        max_y = math.ceil(max(point.y for point in points))
+
+        width = max(1, max_x - min_x)
+        height = max(1, max_y - min_y)
+        tiled_surface = pygame.Surface((width, height), pygame.SRCALPHA)
+
+        tile_width, tile_height = texture.get_size()
+        start_x = math.floor(min_x / tile_width) * tile_width
+        start_y = math.floor(min_y / tile_height) * tile_height
+
+        for y in range(start_y, max_y + tile_height, tile_height):
+            for x in range(start_x, max_x + tile_width, tile_width):
+                tiled_surface.blit(texture, (x - min_x, y - min_y))
+
+        clip_surface = pygame.Surface((width, height), pygame.SRCALPHA)
+        local_points = [(point.x - min_x, point.y - min_y) for point in points]
+        pygame.draw.polygon(clip_surface, (255, 255, 255, 255), local_points)
+        tiled_surface.blit(clip_surface, (0, 0), special_flags=pygame.BLEND_RGBA_MULT)
+        self.screen.blit(tiled_surface, (min_x, min_y))
 
     def draw_selection(self, e: Element) -> None:
         if e.points:
