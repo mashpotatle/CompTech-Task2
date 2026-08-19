@@ -727,8 +727,6 @@ class LevelManager:
         if movement_direction is not None:
             if movement_direction.x < 0:
                 return None
-            if movement_direction.x == 0 and movement_direction.y == 0:
-                return None
 
         if (
             player_position.distance_to(

@@ -179,6 +179,7 @@ class Game:
         self.death_audio_played = False
         self.active_item_label = ""
         self.showing_endless_confirmation = False
+        self.section_transition_attempted = False
 
         # Controls whether the main game loop continues running.
         self.running = True
@@ -388,6 +389,7 @@ class Game:
         self.active_item_label = ""
         self.showing_endless_confirmation = False
         self.lore_collection_active = False
+        self.section_transition_attempted = False
 
         # Start the player at the entry position of the first section.
         #
@@ -880,12 +882,9 @@ class Game:
             return
 
         exit_position = (
-            self.level_manager.get_last_exit_position(
-            )
+            current_instance.world_offset
+            + current_instance.section.exit_position
         )
-
-        if exit_position is None:
-            return
 
         distance_to_exit = (
             self.player.position.distance_to(
@@ -894,7 +893,11 @@ class Game:
         )
 
         if distance_to_exit <= 100:
-            self.load_next_section()
+            if not self.section_transition_attempted:
+                self.section_transition_attempted = True
+                self.load_next_section()
+        else:
+            self.section_transition_attempted = False
 
     def load_next_section(self):
         """
@@ -911,9 +914,6 @@ class Game:
         )
 
         if next_instance is None:
-            print(
-                "No more sections available for generation."
-            )
             return
 
         self.current_section_instance = next_instance
