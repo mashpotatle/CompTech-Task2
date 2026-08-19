@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pygame
 
-from settings import PRELOAD_SECTION_COUNT
+from settings import PRELOAD_SECTION_COUNT, SECTIONS_BEHIND_TO_KEEP
 from levels.cave_section import (
     CaveSection,
     LevelElement,
@@ -42,6 +42,7 @@ class LevelManager:
         data_directory: str | Path,
         available_sections: list[str],
         preload_section_count: int | None = None,
+        sections_behind_to_keep: int | None = None,
     ):
         """
         Initialise the level manager.
@@ -90,6 +91,12 @@ class LevelManager:
             else PRELOAD_SECTION_COUNT
         )
 
+        self.sections_behind_to_keep = (
+            sections_behind_to_keep
+            if sections_behind_to_keep is not None
+            else SECTIONS_BEHIND_TO_KEEP
+        )
+
         # ----------------------------------------------------------
         # Loaded sections
         # ----------------------------------------------------------
@@ -123,6 +130,9 @@ class LevelManager:
         # Filename of the most recently generated section.
 
         self.last_generated_filename: str | None = None
+
+        # Ensures the "no sections available" warning only prints once.
+        self._warned_no_sections_available = False
 
     # ==================================================================
     # INITIAL LOADING
@@ -209,23 +219,73 @@ class LevelManager:
         sections loaded ahead of it so transitions remain smooth.
         """
 
-        if self.preload_section_count <= 0:
+        if self.preload_section_count > 0:
+
+            while (
+                self._get_loaded_sections_ahead_count()
+                < self.preload_section_count
+            ):
+                next_filename = (
+                    self.get_random_section_filename()
+                )
+
+                if next_filename is None:
+                    break
+
+                self.stitch_next_section(
+                    next_filename
+                )
+
+        self._prune_distant_sections()
+
+    def _prune_distant_sections(self) -> None:
+        """
+        Unload sections that fall outside the small window kept around
+        the active section.
+
+        Only ``sections_behind_to_keep`` sections behind the player and
+        ``preload_section_count`` sections ahead remain loaded. This
+        keeps the amount of per-frame element copying (walls, entities,
+        collision geometry) bounded no matter how far the player has
+        travelled. Pruned sections lose their runtime state (e.g.
+        dropped items) if revisited later.
+        """
+
+        if not self.sections:
             return
 
-        while (
-            self._get_loaded_sections_ahead_count()
-            < self.preload_section_count
+        if not (
+            0
+            <= self.current_section_index
+            < len(self.sections)
         ):
-            next_filename = (
-                self.get_random_section_filename()
-            )
+            return
 
-            if next_filename is None:
-                return
+        current_instance = (
+            self.sections[self.current_section_index]
+        )
 
-            self.stitch_next_section(
-                next_filename
-            )
+        lower_bound = (
+            self.current_section_index
+            - self.sections_behind_to_keep
+        )
+
+        upper_bound = (
+            self.current_section_index
+            + self.preload_section_count
+        )
+
+        self.sections = [
+            instance
+            for index, instance in enumerate(self.sections)
+            if lower_bound <= index <= upper_bound
+        ]
+
+        self.current_section_index = next(
+            index
+            for index, instance in enumerate(self.sections)
+            if instance is current_instance
+        )
 
     # ==================================================================
     # RANDOM SECTION SELECTION
@@ -359,6 +419,13 @@ class LevelManager:
         )
 
         if filename is None:
+            # Genuinely no section files are available at all. Warn once
+            # instead of every frame so this doesn't flood the console.
+            if not self._warned_no_sections_available:
+                print(
+                    "LevelManager: no cave section files available to generate."
+                )
+                self._warned_no_sections_available = True
             return None
 
         return self.stitch_next_section(

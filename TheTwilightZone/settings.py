@@ -35,7 +35,12 @@ TARGET_FPS = 60
 
 # Number of sections to load ahead of the player so transitions feel
 # smoother. Set to 0 to disable preloading.
-PRELOAD_SECTION_COUNT = 3
+PRELOAD_SECTION_COUNT = 1
+
+# Number of sections to keep loaded behind the player. Sections further
+# behind are unloaded to keep the world (and per-frame element copies)
+# from growing without bound.
+SECTIONS_BEHIND_TO_KEEP = 1
 
 # ---------------------------------------------------------------------------
 # Debug Settings
