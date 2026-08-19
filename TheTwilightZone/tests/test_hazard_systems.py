@@ -4,6 +4,7 @@ os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pygame
 
+from assets.fish_model import create_fish_sprite
 from assets.spiky_plant_model import create_spiky_plant_sprite
 from entities.silt_cloud import SiltCloud
 from entities.thermal_vent import ThermalVent
@@ -83,4 +84,16 @@ def test_spiky_plant_sprite_preserves_asset_shape():
 
     assert sprite.get_size() == (66, 66)
     assert opaque_bounds.width <= 66
+    assert opaque_bounds.height < opaque_bounds.width
+
+
+def test_fish_sprite_preserves_wide_asset_shape():
+    pygame.init()
+    pygame.display.set_mode((1, 1))
+
+    sprite = create_fish_sprite(96, 60)
+    opaque_bounds = sprite.get_bounding_rect()
+
+    assert sprite.get_size() == (96, 60)
+    assert opaque_bounds.width <= 96
     assert opaque_bounds.height < opaque_bounds.width

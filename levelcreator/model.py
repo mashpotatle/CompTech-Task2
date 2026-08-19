@@ -43,10 +43,10 @@ ENTITY_DEFINITIONS: dict[str, dict[str, Any]] = {
         "label": "Spiky Plant",
         "kind": "circle",
         "colour": (100, 210, 100),
-        "default_radius": 22,
+        "default_radius": 5,
         "fields": {
             "damage": ("int", 10),
-            "radius": ("float", 22.0),
+            "radius": ("float", 5.0),
         },
     },
     "thermal_vent": {
