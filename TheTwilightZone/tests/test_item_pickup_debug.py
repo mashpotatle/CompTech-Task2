@@ -27,3 +27,25 @@ def test_item_pickup_marks_world_item_collected_and_hides_it():
     assert item.properties.get("collected") is True
     assert item.properties.get("in_inventory") is True
     assert game.inventory.active_item is not None or game.inventory.slots[0] == "oxygen_tank"
+
+
+def test_item_pickup_uses_the_section_world_offset():
+    pygame.init()
+    game = Game()
+
+    item = LevelElement(
+        element_id="item_001",
+        element_type="item",
+        position=pygame.Vector2(100, 100),
+        properties={"item_type": "med_kit", "pickup_radius": 48.0},
+    )
+    section = game.level_manager.sections[0]
+    section.section.elements = [item]
+    section.world_offset = pygame.Vector2(500, 0)
+    game.player.position = pygame.Vector2(600, 100)
+    game.player.rect.center = (600, 100)
+
+    game.check_item_pickups()
+
+    assert item.properties.get("collected") is True
+    assert game.inventory.slots[0] == "med_kit"

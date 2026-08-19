@@ -62,6 +62,9 @@ class Player:
         # Health (temporary). A simple integer health pool for
         # environmental damage and entity attacks.
         self.health = 100
+        # Tracks fractional damage between frames so slow damage-over-time
+        # sources (e.g. thermal vents) aren't lost to integer truncation.
+        self._damage_remainder = 0.0
         # Wobble visual state applied when inside a current.
         self.wobble_strength = 0.0
         self.wobble_timer = 0.0
@@ -250,15 +253,26 @@ class Player:
         sprite_rect = sprite.get_rect(center=screen_rect.center)
         screen.blit(sprite, sprite_rect)
 
-    def apply_damage(self, amount: int) -> None:
-        """Reduce player health by `amount` and clamp at zero."""
+    def apply_damage(self, amount: float) -> None:
+        """Reduce player health by `amount` and clamp at zero.
+
+        Fractional amounts accumulate across calls so continuous, sub-1
+        per-frame damage (like thermal vent heat) still adds up over time.
+        """
 
         try:
-            damage = int(amount)
+            damage = float(amount)
         except Exception:
             return
 
-        self.health = max(0, self.health - damage)
+        if damage <= 0:
+            return
+
+        self._damage_remainder += damage
+        whole_damage = int(self._damage_remainder)
+        if whole_damage > 0:
+            self._damage_remainder -= whole_damage
+            self.health = max(0, self.health - whole_damage)
 
     def add_wobble(self, strength: float, duration: float) -> None:
         """Increase wobble visual effect with given `strength` and `duration`.

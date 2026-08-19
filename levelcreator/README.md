@@ -66,6 +66,8 @@ python main.py
 - Middle mouse Pan
 - Left mouse Place / Select
 - Right mouse Finish polygon
+- Click an item's `item_type` property to cycle the supported pickup presets:
+  `oxygen_tank` and `med_kit`
 
 ## Important
 

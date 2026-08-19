@@ -642,7 +642,7 @@ class Game:
                 self.vent_heat_intensity = max(self.vent_heat_intensity, 1.0)
                 damage = vent.get_damage_at_distance(distance) * delta_time
                 if damage > 0:
-                    self.player.apply_damage(int(damage))
+                    self.player.apply_damage(damage)
                     self.trigger_damage_feedback((255, 140, 0), 0.28)
                     if self.player.health <= 0:
                         self.cause_of_death = "Thermal vent"
@@ -1468,7 +1468,8 @@ class Game:
     def check_item_pickups(self):
         """Collect nearby world items into the hotbar when a slot is free."""
         for section_instance in self.level_manager.sections:
-            for element in section_instance.section.elements:
+            dropped_items = section_instance.runtime_state.get("dropped_items", [])
+            for element in [*section_instance.section.elements, *dropped_items]:
                 if element.element_type != "item":
                     continue
 
@@ -1476,19 +1477,12 @@ class Game:
                     continue
 
                 radius = float(element.properties.get("pickup_radius", 48.0))
-                if self.player.position.distance_to(element.position) <= radius:
+                item_position = element.position + section_instance.world_offset
+                if self.player.position.distance_to(item_position) <= radius:
                     item_type = str(element.properties.get("item_type", "oxygen_tank"))
                     if self.inventory.add_item(item_type):
                         element.properties["collected"] = True
                         element.properties["in_inventory"] = True
-
-                        # Also hide dropped runtime items if they are represented in the section runtime state.
-                        runtime_state = section_instance.runtime_state.get("dropped_items", [])
-                        for dropped_item in runtime_state:
-                            if dropped_item.element_id == element.element_id:
-                                dropped_item.properties["collected"] = True
-                                dropped_item.properties["in_inventory"] = True
-
                         self.play_sound("pickup")
 
     def use_active_item(self):

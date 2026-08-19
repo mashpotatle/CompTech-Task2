@@ -58,6 +58,8 @@ class ThermalVent(pygame.sprite.Sprite):
         self.bubble_speed = max(0.05, float(bubble_speed))
 
         self._animation_time = 0.0
+        self._eruption_timer = 0.0
+        self.is_erupting = False
 
         visual_radius = max(
             self.damage_radius,
@@ -68,46 +70,85 @@ class ThermalVent(pygame.sprite.Sprite):
         diameter = max(48, int(math.ceil(visual_radius * 2 + 20)))
         self.image = pygame.Surface((diameter, diameter), pygame.SRCALPHA)
         self.rect = self.image.get_rect(center=(round(self.position.x), round(self.position.y)))
+        self._plume_surface: pygame.Surface | None = None
         self._draw_visual()
 
     def update(self, delta_time: float) -> None:
-        """Advance vent visual animation and keep position aligned."""
+        """Advance vent visual animation, eruption cycle, and keep position aligned."""
         if delta_time > 0:
             self._animation_time = (self._animation_time + delta_time * self.bubble_speed) % 1.0
+            self._update_eruption_state(delta_time)
             self._draw_visual()
         self.rect.center = (round(self.position.x), round(self.position.y))
 
+    def _update_eruption_state(self, delta_time: float) -> None:
+        """Advance the eruption timer and toggle whether the vent is currently erupting."""
+        if self.eruption_interval <= 0:
+            self.is_erupting = False
+            return
+
+        period = self.eruption_interval + self.eruption_duration
+        self._eruption_timer = (self._eruption_timer + delta_time) % period
+        self.is_erupting = self._eruption_timer >= self.eruption_interval
+
+    def _build_plume_surface(self) -> pygame.Surface:
+        """Bake a soft, gradient haze plume from overlapping fuzzy blobs instead of hard-edged polygons."""
+        diameter = self.image.get_width()
+        plume = pygame.Surface((diameter, diameter), pygame.SRCALPHA)
+
+        center = pygame.Vector2(diameter / 2, diameter / 2)
+        plume_length = max(self.haze_length, self.radius * 2.5, 50.0)
+        plume_width = max(self.haze_width, self.radius * 1.2, 18.0)
+        alpha_scale = self.haze_alpha / 255.0
+
+        steps = 40
+        for i in range(steps, -1, -1):
+            t = i / steps
+            blob_center = center + self.direction * (plume_length * t)
+            blob_radius = max(3.0, (plume_width * 0.5) * (0.2 + (1.0 - t) * 0.85))
+
+            color_t = min(1.0, t * 1.2)
+            r = 255
+            g = int(240 - (240 - 150) * color_t)
+            b = int(90 + (170 - 90) * (1.0 - color_t))
+            fade = (1.0 - t) ** 0.6
+
+            self._blit_soft_blob(plume, blob_center, blob_radius, (r, g, b), fade * alpha_scale)
+
+        return plume
+
+    @staticmethod
+    def _blit_soft_blob(surface: pygame.Surface, center: pygame.Vector2, radius: float, color: tuple[int, int, int], alpha_scale: float) -> None:
+        """Draw a circle whose alpha fades smoothly from centre to edge, avoiding hard rings when overlapped."""
+        if alpha_scale <= 0 or radius <= 0:
+            return
+
+        rings = 10
+        for ring in range(rings, 0, -1):
+            ring_t = ring / rings
+            ring_radius = max(1, round(radius * ring_t))
+            ring_alpha = int(60 * alpha_scale * (1.0 - ring_t) ** 1.5)
+            if ring_alpha <= 0:
+                continue
+            pygame.draw.circle(
+                surface,
+                (*color, ring_alpha),
+                (round(center.x), round(center.y)),
+                ring_radius,
+            )
+
     def _draw_visual(self) -> None:
         self.image.fill((0, 0, 0, 0))
+
+        # The plume shape never changes at runtime, so bake it once and reuse it.
+        if self._plume_surface is None:
+            self._plume_surface = self._build_plume_surface()
+        self.image.blit(self._plume_surface, (0, 0))
 
         center = pygame.Vector2(self.image.get_width() / 2, self.image.get_height() / 2)
         side = pygame.Vector2(-self.direction.y, self.direction.x)
 
         plume_length = max(self.haze_length, self.radius * 2.5, 50.0)
-        plume_width = max(self.haze_width, self.radius * 1.2, 18.0)
-
-        # Soft yellow-to-orange plume emanating from the vent mouth.
-        for i in range(18):
-            t = (i + 1) / 18.0
-            start = center + self.direction * (plume_length * (t - 0.12))
-            end = center + self.direction * (plume_length * t)
-            half_width = plume_width * (0.12 + (1.0 - t) * 0.9)
-            point_a = start - side * half_width
-            point_b = end + side * half_width * 0.7
-            point_c = end - side * half_width * 0.7
-            point_d = start + side * half_width
-
-            color_t = min(1.0, t * 1.25)
-            r = int(255)
-            g = int(240 - (240 - 150) * color_t)
-            b = int(70 + (180 - 70) * (1.0 - color_t))
-            alpha = int(80 + (180 - 80) * (1.0 - t))
-            pygame.draw.polygon(
-                self.image,
-                (r, g, b, alpha),
-                [(round(point_a.x), round(point_a.y)), (round(point_b.x), round(point_b.y)),
-                 (round(point_c.x), round(point_c.y)), (round(point_d.x), round(point_d.y))],
-            )
 
         # Fine bubbles stream away from the vent in a single narrow line.
         for i in range(max(8, self.bubble_count)):
@@ -140,12 +181,15 @@ class ThermalVent(pygame.sprite.Sprite):
         screen.blit(self.image, screen_rect)
 
     def get_damage_at_distance(self, distance: float) -> float:
-        """Return the continuous heat damage at a given distance."""
+        """Return the heat damage (passive plus eruption burst) at a given distance."""
         if self.damage_radius <= 0:
             return 0.0
 
         if distance > self.damage_radius:
             return 0.0
 
-        ratio = 1.0 - (distance / self.damage_radius)
-        return self.damage_per_second * max(0.0, ratio)
+        ratio = max(0.0, 1.0 - (distance / self.damage_radius))
+        damage = self.damage_per_second * ratio
+        if self.is_erupting:
+            damage += self.eruption_damage * ratio
+        return damage

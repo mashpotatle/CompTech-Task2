@@ -8,6 +8,7 @@ from pathlib import Path
 
 
 DIRECTIONS = ("left", "right", "up", "down")
+ITEM_PRESET_IDS = ("oxygen_tank", "med_kit")
 
 
 ENTITY_DEFINITIONS: dict[str, dict[str, Any]] = {
@@ -98,7 +99,7 @@ ENTITY_DEFINITIONS: dict[str, dict[str, Any]] = {
         "colour": (235, 205, 75),
         "default_radius": 18,
         "fields": {
-            "item_type": ("str", "oxygen_tank"),
+            "item_type": ("item_id", ITEM_PRESET_IDS[0]),
             "pickup_radius": ("float", 48.0),
         },
     },

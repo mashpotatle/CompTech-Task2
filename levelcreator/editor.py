@@ -10,7 +10,7 @@ import traceback
 
 import pygame
 
-from model import DIRECTIONS, ENTITY_DEFINITIONS, Element, Level
+from model import DIRECTIONS, ENTITY_DEFINITIONS, ITEM_PRESET_IDS, Element, Level
 
 
 WIDTH, HEIGHT = 1440, 900
@@ -746,6 +746,16 @@ class LevelEditor:
         for name, kind, default in fields:
             row = pygame.Rect(rect.left + 12, y, 305, 25)
             if row.collidepoint(pos):
+                if kind == "item_id":
+                    self.commit()
+                    current = str(self.selected.properties.get(name, default))
+                    try:
+                        next_index = (ITEM_PRESET_IDS.index(current) + 1) % len(ITEM_PRESET_IDS)
+                    except ValueError:
+                        next_index = 0
+                    self.selected.properties[name] = ITEM_PRESET_IDS[next_index]
+                    self.set_status(f"Item preset: {ITEM_PRESET_IDS[next_index]}.")
+                    return
                 self.typing_field = name
                 self.typing_value = str(self.selected.properties.get(name, default))
                 self.set_status(f"Editing {name}; Enter applies, Esc cancels.")
@@ -1017,7 +1027,8 @@ class LevelEditor:
                 box = pygame.Rect(r.left+12, y, 305, 25)
                 pygame.draw.rect(self.screen, BG, box)
                 pygame.draw.rect(self.screen, ACCENT if self.typing_field == name else BORDER, box, 1)
-                self.text(f"{name}: {value}", (box.x+5, box.y+5), self.small, TEXT)
+                suffix = " (click to cycle)" if kind == "item_id" else ""
+                self.text(f"{name}: {value}{suffix}", (box.x+5, box.y+5), self.small, TEXT)
                 y += 29
 
         # File actions
