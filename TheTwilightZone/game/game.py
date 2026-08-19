@@ -8,6 +8,7 @@ The Game class coordinates the major game systems but does not own
 the level data itself. Level data is managed by LevelManager.
 """
 
+import json
 import math
 import random
 from pathlib import Path
@@ -15,8 +16,9 @@ from pathlib import Path
 import pygame
 from pygame import mixer
 
-from assets.med_kit_model import create_med_kit_sprite
-from assets.o2_tank_model import create_oxygen_tank_sprite
+from data.assets.lore_model import create_lore_sprite
+from data.assets.med_kit_model import create_med_kit_sprite
+from data.assets.o2_tank_model import create_oxygen_tank_sprite
 from game.game_state import GameState
 from entities.player import Player
 from levels.level_manager import LevelManager
@@ -25,7 +27,7 @@ from systems.collision import CollisionSystem
 from systems.camera import Camera
 from systems.inventory import Inventory
 from systems.oxygen import OxygenSystem
-from ui.menus import EndlessRunConfirmation, MainMenu, PauseMenu
+from ui.menus import EndlessRunConfirmation, LoreCollectionScreen, MainMenu, PauseMenu
 from ui.hud import HUD
 from ui.hotbar import Hotbar
 from ui.death_screen import DeathScreen
@@ -45,14 +47,10 @@ from settings import (
     WINDOW_TITLE,
     save_settings,
 )
-from paths import CAVE_SECTIONS_DIR
+from paths import ASSETS_DIR, CAVE_SECTIONS_DIR, DATA_DIR
 
 
-WALL_TEXTURE_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "assets"
-    / "cave_wall.png"
-)
+WALL_TEXTURE_PATH = ASSETS_DIR / "cave_wall.png"
 
 
 class Game:
@@ -88,6 +86,7 @@ class Game:
             self.audio_enabled = False
 
         self._sound_cache = {}
+        self._sound_categories = {}
         self._init_audio()
 
         # ----------------------------------------------------------
@@ -110,6 +109,7 @@ class Game:
         self.item_sprites = {
             "oxygen_tank": create_oxygen_tank_sprite(70, 70),
             "med_kit": create_med_kit_sprite(70, 70),
+            "lore_fragment": create_lore_sprite(70, 70),
         }
         self.overlay_surface = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         self.debug_font_small = pygame.font.Font(None, 20)
@@ -147,7 +147,12 @@ class Game:
         self.hud = HUD()
         self.hotbar = Hotbar()
         self.inventory = Inventory()
+        self.hotbar.set_item_icons(self.item_sprites)
         self.death_screen = DeathScreen(
+            SCREEN_WIDTH,
+            SCREEN_HEIGHT,
+        )
+        self.lore_collection = LoreCollectionScreen(
             SCREEN_WIDTH,
             SCREEN_HEIGHT,
         )
@@ -163,9 +168,15 @@ class Game:
         self.damage_flash_timer = 0.0
         self.damage_flash_duration = 0.35
         self.damage_flash_color = (255, 60, 60)
+        self.damage_flash_elapsed = 0.0
         self.silt_intensity = 0.0
-        self.vent_heat_intensity = 0.0
         self.low_oxygen_intensity = 0.0
+        self.low_oxygen_audio_active = False
+        self.current_audio_active = False
+        self.silt_audio_active = False
+        self.thermal_audio_active = False
+        self.heartbeat_audio_active = False
+        self.death_audio_played = False
         self.active_item_label = ""
         self.showing_endless_confirmation = False
 
@@ -190,16 +201,46 @@ class Game:
         self._start_new_run()
 
     def _init_audio(self):
-        """Create lightweight generated SFX so the game has basic audio feedback."""
+        """Load supplied audio and create generated feedback sounds."""
         if not self.audio_enabled:
             return
 
+        ambience_path = ASSETS_DIR / "Thalassophobia.mp3"
+        scrape_path = ASSETS_DIR / "scrape.mp3"
         self._sound_cache = {
             "menu": self._make_sound_tone(880.0, 0.08, 0.12),
             "pickup": self._make_sound_tone(660.0, 0.12, 0.18),
             "damage": self._make_sound_tone(200.0, 0.20, 0.25),
             "confirm": self._make_sound_tone(1040.0, 0.10, 0.18),
+            "oxygen_warning": self._make_sound_tone(520.0, 0.16, 0.20),
+            "drowning": self._make_sound_tone(110.0, 0.45, 0.24),
+            "current": self._make_sound_tone(150.0, 0.30, 0.12),
+            "silt": self._make_sound_tone(75.0, 0.35, 0.10),
+            "thermal": self._make_sound_tone(95.0, 0.40, 0.14),
+            "heartbeat": self._make_sound_tone(62.0, 0.18, 0.26),
+            "death": self._make_sound_tone(55.0, 0.75, 0.30),
+            "scrape": pygame.mixer.Sound(str(scrape_path)) if scrape_path.exists() else None,
         }
+        self._sound_categories = {
+            "menu": "menu",
+            "confirm": "menu",
+            "oxygen_warning": "game",
+            "drowning": "game",
+            "current": "game",
+            "silt": "game",
+            "thermal": "game",
+            "heartbeat": "game",
+            "death": "game",
+            "damage": "game",
+            "scrape": "game",
+            "pickup": "game",
+        }
+
+        if ambience_path.exists():
+            pygame.mixer.music.load(str(ambience_path))
+            pygame.mixer.music.play(loops=-1)
+
+        self.update_audio_volumes()
 
     def _make_sound_tone(self, frequency: float, duration: float = 0.08, volume: float = 0.18):
         """Generate a simple sine-wave sound effect without external assets."""
@@ -215,19 +256,67 @@ class Game:
             amplitude = int(max(-1.0, min(1.0, value)) * 32767 * volume)
             raw.extend((amplitude & 0xFF, (amplitude >> 8) & 0xFF))
         sound = pygame.mixer.Sound(buffer=bytes(raw))
-        sound.set_volume(max(0.0, min(1.0, SETTINGS.master_volume / 100.0)))
+        sound.set_volume(1.0)
         return sound
+
+    def update_audio_volumes(self) -> None:
+        """Apply persisted master and per-channel volumes immediately."""
+        if not self.audio_enabled:
+            return
+
+        master = max(0.0, min(1.0, SETTINGS.master_volume / 100.0))
+        ambience = max(0.0, min(1.0, SETTINGS.ambience_volume / 100.0))
+        menu = max(0.0, min(1.0, SETTINGS.menus_volume / 100.0))
+        game = max(0.0, min(1.0, SETTINGS.game_volume / 100.0))
+        pygame.mixer.music.set_volume(master * ambience)
+
+        for name, sound in self._sound_cache.items():
+            if sound is None:
+                continue
+            category = self._sound_categories.get(name, "game")
+            category_volume = menu if category == "menu" else game
+            sound.set_volume(master * category_volume)
 
     def play_sound(self, name: str):
         """Play a cached generated sound if audio is enabled."""
         if not self.audio_enabled:
             return
+        self.update_audio_volumes()
         sound = self._sound_cache.get(name)
         if sound is not None:
+            if sound.get_num_channels() > 0:
+                sound.stop()
             sound.play()
+
+    def start_looping_sound(self, name: str) -> None:
+        """Start a cached sound loop without restarting an active loop."""
+        if not self.audio_enabled:
+            return
+        sound = self._sound_cache.get(name)
+        if sound is not None and sound.get_num_channels() == 0:
+            sound.play(loops=-1)
+
+    def stop_sound(self, name: str) -> None:
+        """Stop a cached sound if it is currently playing."""
+        if not self.audio_enabled:
+            return
+        sound = self._sound_cache.get(name)
+        if sound is not None:
+            sound.stop()
+
+    def trigger_death_audio(self) -> None:
+        """Stop hazard loops and play the death cue once per run."""
+        if self.death_audio_played:
+            return
+        for sound_name in ("heartbeat", "thermal"):
+            self.stop_sound(sound_name)
+        self.play_sound("death")
+        self.death_audio_played = True
 
     def trigger_damage_feedback(self, color: tuple[int, int, int] | None = None, duration: float | None = None) -> None:
         """Trigger a brief screen flash to communicate damage or hazard contact."""
+        if self.damage_flash_timer <= 0:
+            self.damage_flash_elapsed = 0.0
         self.damage_flash_color = color or (255, 60, 60)
         self.damage_flash_duration = duration if duration is not None else 0.35
         self.damage_flash_timer = self.damage_flash_duration
@@ -255,7 +344,7 @@ class Game:
             for path in sorted(
                 self.level_data_directory.glob("*.json")
             )
-            if path.is_file()
+            if path.is_file() and path.name != "section_00.json"
         ]
 
         self.level_manager = LevelManager(
@@ -290,8 +379,15 @@ class Game:
         self.silt_intensity = 0.0
         self.vent_heat_intensity = 0.0
         self.low_oxygen_intensity = 0.0
+        self.low_oxygen_audio_active = False
+        self.current_audio_active = False
+        self.silt_audio_active = False
+        self.thermal_audio_active = False
+        self.heartbeat_audio_active = False
+        self.death_audio_played = False
         self.active_item_label = ""
         self.showing_endless_confirmation = False
+        self.lore_collection_active = False
 
         # Start the player at the entry position of the first section.
         #
@@ -368,13 +464,22 @@ class Game:
 
         mouse_pos = pygame.mouse.get_pos()
 
-        mouse_pos = pygame.mouse.get_pos()
+        if self.lore_collection_active:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                action = self.lore_collection.handle_events(event, mouse_pos)
+                if action == "DISMISS":
+                    self.lore_collection_active = False
+                    self.play_sound("menu")
+            return
 
         for event in pygame.event.get():
 
             # pygame.QUIT is generated when the player closes
             # the application window.
             if event.type == pygame.QUIT:
+                self.save_progress()
                 self.running = False
 
             if self.game_state == GameState.MAIN_MENU and not self.showing_endless_confirmation:
@@ -384,6 +489,7 @@ class Game:
                     self.showing_endless_confirmation = True
                 elif action == "EXIT":
                     self.play_sound("menu")
+                    self.save_progress()
                     self.running = False
 
             if self.showing_endless_confirmation:
@@ -429,6 +535,7 @@ class Game:
                     self.pause_menu.confirming_quit = False
                 elif action == "QUIT_TO_MENU":
                     self.play_sound("menu")
+                    self.save_progress()
                     self.game_state = GameState.MAIN_MENU
                     self.pause_menu.confirming_quit = False
                 elif isinstance(action, tuple) and action[0] == "SWAP_SLOTS":
@@ -464,10 +571,22 @@ class Game:
                 Time in seconds since the previous frame.
         """
 
+        self.update_audio_volumes()
+
+        if self.lore_collection_active:
+            return
+
         self.damage_flash_timer = max(0.0, self.damage_flash_timer - delta_time)
+        if self.damage_flash_timer > 0:
+            self.damage_flash_elapsed = min(
+                self.damage_flash_duration,
+                self.damage_flash_elapsed + delta_time,
+            )
+        else:
+            self.damage_flash_elapsed = 0.0
         self.silt_intensity = max(0.0, self.silt_intensity - (delta_time * 0.8))
-        self.vent_heat_intensity = max(0.0, self.vent_heat_intensity - (delta_time * 1.2))
         self.low_oxygen_intensity = max(0.0, self.low_oxygen_intensity - (delta_time * 1.0))
+        self.inventory.update(delta_time)
 
         if self.game_state == GameState.MAIN_MENU:
 
@@ -508,6 +627,7 @@ class Game:
         # requiring a full menu rebuild.
         self.main_menu.max_distance = SETTINGS.max_distance_travelled
         self.main_menu.color_blind_enabled = SETTINGS.color_blind_mode
+        self.main_menu.update(delta_time)
 
     def update_pause_menu(
         self,
@@ -567,9 +687,11 @@ class Game:
             if self.oxygen_fade_timer <= 0.0:
                 self.oxygen_fade_timer = self.oxygen_fade_duration
                 self.cause_of_death = "Drowning"
+                self.play_sound("drowning")
             else:
                 self.oxygen_fade_timer = max(0.0, self.oxygen_fade_timer - delta_time)
                 if self.oxygen_fade_timer <= 0.0:
+                    self.trigger_death_audio()
                     self.game_state = GameState.DEAD
                     return
             return
@@ -585,7 +707,17 @@ class Game:
             self.collision_system,
         )
 
+        if self.player.wall_touching:
+            self.start_looping_sound("scrape")
+            if self.player.consume_wall_scrape():
+                self.trigger_damage_feedback((120, 120, 130), 0.08)
+        else:
+            self.stop_sound("scrape")
+            self.player.wall_scrape_buffer = 0.0
+            self.player.end_wall_scrape()
+
         self.check_item_pickups()
+        self.update_item_physics(delta_time)
 
         # ----------------------------------------------------------
         # Fish
@@ -633,6 +765,14 @@ class Game:
                 wobble_strength = min(2.0, force_mag / 100.0)
                 self.player.add_wobble(wobble_strength, 0.5)
 
+        current_active = any(
+            current.get_force_at_position(self.player.position).length_squared() > 0
+            for current in self.currents
+        )
+        if current_active and not self.current_audio_active:
+            self.play_sound("current")
+        self.current_audio_active = current_active
+
         # ----------------------------------------------------------
         # Silt clouds
         # ----------------------------------------------------------
@@ -647,31 +787,48 @@ class Game:
                 self.player.velocity *= 1.0 - min(0.75, cloud.speed_reduction * 0.75)
         if not silt_active:
             self.silt_intensity = max(0.0, self.silt_intensity - (delta_time * 1.5))
+        if silt_active and not self.silt_audio_active:
+            self.play_sound("silt")
+        self.silt_audio_active = silt_active
 
         # ----------------------------------------------------------
         # Thermal vents
         # ----------------------------------------------------------
 
+        thermal_active = False
         for vent in self.thermal_vents:
             vent.update(delta_time)
-            distance = self.player.position.distance_to(vent.position)
-            if distance <= vent.damage_radius:
-                self.vent_heat_intensity = max(self.vent_heat_intensity, 1.0)
-                damage = vent.get_damage_at_distance(distance) * delta_time
-                if damage > 0:
-                    self.player.apply_damage(damage)
-                    self.trigger_damage_feedback((255, 140, 0), 0.28)
-                    if self.player.health <= 0:
-                        self.cause_of_death = "Thermal vent"
-                        self.game_state = GameState.DEAD
-                        return
-            elif distance <= vent.damage_radius * 1.7:
-                self.vent_heat_intensity = max(self.vent_heat_intensity, 0.55)
+            damage = vent.get_damage_at_position(self.player.position) * delta_time
+            if damage > 0:
+                thermal_active = True
+                self.player.apply_damage(damage)
+                self.trigger_damage_feedback((255, 160, 40), 0.2)
+                if self.player.health <= 0:
+                    self.cause_of_death = "Thermal vent"
+                    self.trigger_death_audio()
+                    self.game_state = GameState.DEAD
+                    return
+        if thermal_active:
+            self.start_looping_sound("thermal")
+        elif self.thermal_audio_active:
+            self.stop_sound("thermal")
+        self.thermal_audio_active = thermal_active
 
         if self.oxygen_percent < 25.0:
             self.low_oxygen_intensity = max(self.low_oxygen_intensity, 1.0)
+            if not self.low_oxygen_audio_active:
+                self.play_sound("oxygen_warning")
+            self.low_oxygen_audio_active = True
         else:
             self.low_oxygen_intensity = max(0.0, self.low_oxygen_intensity - (delta_time * 1.2))
+            self.low_oxygen_audio_active = False
+
+        if self.player.health <= 25:
+            self.start_looping_sound("heartbeat")
+            self.heartbeat_audio_active = True
+        elif self.heartbeat_audio_active:
+            self.stop_sound("heartbeat")
+            self.heartbeat_audio_active = False
 
         # ----------------------------------------------------------
         # Active section
@@ -841,6 +998,12 @@ class Game:
     # DEATH SCREEN
     # ==================================================================
 
+    def save_progress(self) -> None:
+        """Persist settings and the best distance reached by the current run."""
+        if self.distance_travelled > SETTINGS.max_distance_travelled:
+            SETTINGS.max_distance_travelled = int(self.distance_travelled)
+        save_settings(SETTINGS)
+
     def update_death_screen(
         self,
         delta_time: float,
@@ -859,10 +1022,7 @@ class Game:
             is_new_high_score,
         )
 
-        if is_new_high_score:
-            save_settings(SETTINGS)
-        elif self.distance_travelled >= SETTINGS.max_distance_travelled:
-            save_settings(SETTINGS)
+        self.save_progress()
 
     # ==================================================================
     # RENDERING
@@ -881,6 +1041,10 @@ class Game:
                 30,
             )
         )
+
+        if SETTINGS.color_blind_mode and self.game_state in (GameState.PLAYING, GameState.PAUSED):
+            # Lift the darkest pixels so cave geometry and actors remain visible.
+            self.screen.fill((28, 28, 28), special_flags=pygame.BLEND_RGB_ADD)
 
         if self.game_state in (GameState.PLAYING, GameState.PAUSED):
 
@@ -1003,9 +1167,15 @@ class Game:
         elif self.game_state == GameState.DEAD:
             self.death_screen.draw(self.screen)
 
+        if self.lore_collection_active:
+            self.lore_collection.draw(self.screen)
+
         if self.damage_flash_timer > 0:
-            alpha = int((self.damage_flash_timer / max(self.damage_flash_duration, 0.01)) * 120)
-            self.overlay_surface.fill((*self.damage_flash_color, alpha))
+            fade_in = min(1.0, self.damage_flash_elapsed / 0.06)
+            fade_out = self.damage_flash_timer / max(self.damage_flash_duration, 0.01)
+            alpha = int(min(fade_in, fade_out) * 60)
+            flash_color = (255, 220, 40) if SETTINGS.color_blind_mode else self.damage_flash_color
+            self.overlay_surface.fill((*flash_color, alpha))
             self.screen.blit(self.overlay_surface, (0, 0))
 
         if self.oxygen_fade_timer > 0:
@@ -1015,18 +1185,15 @@ class Game:
             self.screen.blit(self.overlay_surface, (0, 0))
 
         if self.silt_intensity > 0.05:
-            alpha = int(self.silt_intensity * 180)
-            self.overlay_surface.fill((12, 22, 26, alpha))
-            self.screen.blit(self.overlay_surface, (0, 0))
-
-        if self.vent_heat_intensity > 0.05:
-            alpha = int(self.vent_heat_intensity * 110)
-            self.overlay_surface.fill((255, 120, 40, alpha))
+            alpha = int(self.silt_intensity * (120 if SETTINGS.color_blind_mode else 180))
+            silt_color = (55, 55, 30) if SETTINGS.color_blind_mode else (12, 22, 26)
+            self.overlay_surface.fill((*silt_color, alpha))
             self.screen.blit(self.overlay_surface, (0, 0))
 
         if self.low_oxygen_intensity > 0.05:
             alpha = int(self.low_oxygen_intensity * 80)
-            self.overlay_surface.fill((40, 120, 170, alpha))
+            oxygen_color = (0, 180, 220) if SETTINGS.color_blind_mode else (40, 120, 170)
+            self.overlay_surface.fill((*oxygen_color, alpha))
             self.screen.blit(self.overlay_surface, (0, 0))
 
         if self.showing_endless_confirmation:
@@ -1059,24 +1226,14 @@ class Game:
         )
 
         for element in elements:
-
             if element.element_type == "wall":
-
-                self.draw_wall(
-                    element
-                )
-
+                self.draw_wall(element)
             elif element.element_type == "obstacle":
+                self.draw_obstacle(element)
 
-                self.draw_obstacle(
-                    element
-                )
-
-            elif element.element_type == "item":
-
-                self.draw_item(
-                    element
-                )
+        for element in elements:
+            if element.element_type in ("item", "lore_fragment"):
+                self.draw_item(element)
 
     def draw_wall(
         self,
@@ -1263,6 +1420,11 @@ class Game:
             self.screen.blit(rotated_sprite, sprite_rect)
         elif item_type == "med_kit":
             sprite = self.item_sprites["med_kit"]
+            rotated_sprite = pygame.transform.rotate(sprite, rotation)
+            sprite_rect = rotated_sprite.get_rect(center=(int(screen_position.x), int(screen_position.y)))
+            self.screen.blit(rotated_sprite, sprite_rect)
+        elif item_type == "lore_fragment":
+            sprite = self.item_sprites["lore_fragment"]
             rotated_sprite = pygame.transform.rotate(sprite, rotation)
             sprite_rect = rotated_sprite.get_rect(center=(int(screen_position.x), int(screen_position.y)))
             self.screen.blit(rotated_sprite, sprite_rect)
@@ -1515,23 +1677,54 @@ class Game:
                 heat_radius=float(properties.get("heat_radius", 100.0)) * 2.5,
                 heat_damage=float(properties.get("heat_damage", 5.0)),
                 eruption_damage=float(properties.get("eruption_damage", 20.0)),
-                eruption_duration=float(properties.get("eruption_duration", 1.0)),
-                eruption_interval=float(properties.get("eruption_interval", 5.0)),
+                eruption_duration=1.0,
+                eruption_interval=5.0,
                 haze_length=float(properties.get("haze_length", 95.0)) * 2.5,
-                haze_width=float(properties.get("haze_width", 30.0)) * 2.5,
+                vent_width=float(properties.get("vent_width", 30.0)) * 2.5,
                 haze_alpha=int(properties.get("haze_alpha", 65)),
                 bubble_count=int(properties.get("bubble_count", 14)),
-                bubble_spread=float(properties.get("bubble_spread", 15.0)) * 2.5,
                 bubble_speed=float(properties.get("bubble_speed", 1.0)),
             )
             self.thermal_vents.add(vent)
 
+
+    def _random_lore_snippet(self) -> str:
+        """Load a random lore snippet from the data file."""
+        path = DATA_DIR / "lore_snippets.json"
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+            snippets = payload.get("snippets", [])
+            if snippets:
+                return random.choice(snippets)
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            pass
+        return "The cave keeps its secrets."
+
+    def trigger_lore_collection(self, element: LevelElement) -> None:
+        """Open a lore modal instead of placing the item into the hotbar."""
+        if self.lore_collection_active:
+            return
+        if element.properties.get("lore_seen"):
+            return
+
+        element.properties["lore_seen"] = True
+        self.lore_collection.set_text(self._random_lore_snippet())
+        self.lore_collection_active = True
+        self.play_sound("pickup")
 
     def check_item_pickups(self):
         """Collect nearby world items into the hotbar when a slot is free."""
         for section_instance in self.level_manager.sections:
             dropped_items = section_instance.runtime_state.get("dropped_items", [])
             for element in [*section_instance.section.elements, *dropped_items]:
+                if element.element_type == "lore_fragment":
+                    radius = float(element.properties.get("interaction_radius", 48.0))
+                    item_position = element.position + section_instance.world_offset
+                    if self.player.position.distance_to(item_position) <= radius:
+                        self.trigger_lore_collection(element)
+                    continue
+
                 if element.element_type != "item":
                     continue
 
@@ -1542,10 +1735,48 @@ class Game:
                 item_position = element.position + section_instance.world_offset
                 if self.player.position.distance_to(item_position) <= radius:
                     item_type = str(element.properties.get("item_type", "oxygen_tank"))
+                    if item_type == "lore_fragment":
+                        self.trigger_lore_collection(element)
+                        continue
+                    if not self.inventory.can_pickup(item_type):
+                        continue
                     if self.inventory.add_item(item_type):
                         element.properties["collected"] = True
                         element.properties["in_inventory"] = True
                         self.play_sound("pickup")
+
+    ITEM_SINK_SPEED = 60.0
+    ITEM_SINK_SIZE = 16
+
+    def update_item_physics(self, delta_time: float) -> None:
+        """Make world items (placed or dropped) sink until they rest on a wall."""
+        half_size = self.ITEM_SINK_SIZE / 2
+        fall_distance = self.ITEM_SINK_SPEED * delta_time
+
+        for section_instance in self.level_manager.sections:
+            world_offset = section_instance.world_offset
+            dropped_items = section_instance.runtime_state.get("dropped_items", [])
+
+            for element in [*section_instance.section.elements, *dropped_items]:
+                if element.element_type != "item":
+                    continue
+                if element.properties.get("collected"):
+                    continue
+
+                world_position = element.position + world_offset
+                new_y = world_position.y + fall_distance
+
+                probe_rect = pygame.Rect(
+                    world_position.x - half_size,
+                    new_y - half_size,
+                    self.ITEM_SINK_SIZE,
+                    self.ITEM_SINK_SIZE,
+                )
+
+                if self.collision_system.check_collision(probe_rect):
+                    continue
+
+                element.position.y += fall_distance
 
     def use_active_item(self):
         """Apply the active item effect to the player and remove it.
@@ -1574,12 +1805,21 @@ class Game:
 
         current_section = self.level_manager.get_current_section()
         if current_section is None:
-            return
+            if self.level_manager.sections:
+                current_section = self.level_manager.sections[0]
+            else:
+                return
+
+        world_offset = getattr(current_section, "world_offset", pygame.Vector2(0, 0))
+        # Eject the item slightly behind the player so it appears visibly in open water
+        ejection_offset = pygame.Vector2(-self.player.facing * 75.0, 10.0)
+        drop_pos = self.player.position + ejection_offset
+        local_pos = drop_pos - world_offset
 
         dropped = LevelElement(
-            element_id=f"dropped_{item_name}_{abs(hash((self.player.position.x, self.player.position.y, item_name)))}",
+            element_id=f"dropped_{item_name}_{abs(hash((drop_pos.x, drop_pos.y, item_name)))}",
             element_type="item",
-            position=self.player.position.copy(),
+            position=local_pos,
             properties={
                 "item_type": item_name,
                 "pickup_radius": 48.0,
@@ -1590,6 +1830,7 @@ class Game:
         )
 
         self.level_manager.add_dropped_item(current_section, dropped)
+        self.play_sound("pickup")
 
     def handle_fish_damage(
         self,
@@ -1616,6 +1857,7 @@ class Game:
             self.cause_of_death = "Eaten by a fish"
             self.trigger_damage_feedback()
             self.play_sound("damage")
+            self.trigger_death_audio()
             self.game_state = GameState.DEAD
 
     def handle_spiky_plant_damage(
@@ -1640,6 +1882,7 @@ class Game:
             self.cause_of_death = "Spiky plant"
             self.trigger_damage_feedback()
             self.play_sound("damage")
+            self.trigger_death_audio()
             self.game_state = GameState.DEAD
 
     # ==================================================================
@@ -1693,4 +1936,7 @@ class Game:
             self.render()
 
         # Always shut down Pygame cleanly when the game loop ends.
+        self.save_progress()
+        if self.audio_enabled:
+            pygame.mixer.music.stop()
         pygame.quit()

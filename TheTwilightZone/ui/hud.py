@@ -14,6 +14,7 @@ import pygame
 
 from ui.layout import load_layout
 from ui import theme
+from settings import SETTINGS
 
 LOW_VALUE_THRESHOLD = 25
 
@@ -38,8 +39,15 @@ class HUD:
         hp_rect = self.layout.rect("hp_bar", pygame.Rect(20, 20, 220, 26))
         o2_rect = self.layout.rect("o2_bar", pygame.Rect(20, 54, 220, 26))
 
-        self._draw_bar(surface, hp_rect, "HP", hp_percent, self.hp_color)
-        self._draw_bar(surface, o2_rect, "O2", o2_percent, self.o2_color)
+        if SETTINGS.color_blind_mode:
+            hp_color = (255, 220, 40)
+            o2_color = (40, 230, 255)
+        else:
+            hp_color = self.hp_color
+            o2_color = self.o2_color
+
+        self._draw_bar(surface, hp_rect, "HP", hp_percent, hp_color)
+        self._draw_bar(surface, o2_rect, "O2", o2_percent, o2_color)
 
     def _draw_bar(self, surface, rect: pygame.Rect, label: str, percent: float, color) -> None:
         pygame.draw.rect(surface, self.bg_color, rect, border_radius=theme.BAR_BORDER_RADIUS)

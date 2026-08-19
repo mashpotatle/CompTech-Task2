@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 import pygame
 
-from assets.spiky_plant_model import create_spiky_plant_sprite
+from data.assets.spiky_plant_model import create_spiky_plant_sprite
 
 
 class SpikyPlant(pygame.sprite.Sprite):

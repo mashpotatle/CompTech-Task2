@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pygame
 
-from assets.silt_cloud_model import create_silt_cloud_sprite
+from data.assets.silt_cloud_model import create_silt_cloud_sprite
 
 
 class SiltCloud(pygame.sprite.Sprite):

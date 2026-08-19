@@ -10,6 +10,7 @@ DISPLAY_LABELS = {
     "med_kit": "HP",
     "oxygen_tank": "O₂",
 }
+REPICKUP_COOLDOWN_DURATION = 3.0
 
 
 @dataclass
@@ -21,6 +22,7 @@ class Inventory:
 
     slots: list[str | None] = field(default_factory=lambda: [None] * 5)
     active_index: int = 0
+    repickup_cooldown: dict[str, float] = field(default_factory=dict)
 
     def _normalise_index(self, index: int) -> int:
         return max(0, min(len(self.slots) - 1, int(index)))
@@ -40,6 +42,22 @@ class Inventory:
         item = self.slots[idx]
         self.slots[idx] = None
         return item
+
+    def update(self, delta_time: float) -> None:
+        if delta_time <= 0:
+            return
+        expired = []
+        for item_name, remaining in self.repickup_cooldown.items():
+            new_time = remaining - delta_time
+            if new_time <= 0.0:
+                expired.append(item_name)
+            else:
+                self.repickup_cooldown[item_name] = new_time
+        for item_name in expired:
+            self.repickup_cooldown.pop(item_name, None)
+
+    def can_pickup(self, item_name: str) -> bool:
+        return item_name not in self.repickup_cooldown or self.repickup_cooldown[item_name] <= 0.0
 
     def cycle(self, direction: int = 1) -> int:
         if not self.slots:
@@ -66,6 +84,7 @@ class Inventory:
         if item is None:
             return None
         self.slots[self.active_index] = None
+        self.repickup_cooldown[item] = REPICKUP_COOLDOWN_DURATION
         return item
 
     @property

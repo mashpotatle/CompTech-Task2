@@ -1,5 +1,8 @@
+import math
+
 import pygame
 
+from data.assets.player_model import create_player_sprite
 from settings import SETTINGS, save_settings
 from ui import theme
 from ui.layout import load_layout
@@ -62,9 +65,11 @@ class MainMenu:
         # to data/ui/main_menu.json; the hardcoded rects below are only a
         # fallback in case that file is missing.
         self.layout = load_layout("main_menu")
+        self.preview_time = 0.0
+        self.preview_player = create_player_sprite(136, 74)
 
         button_x = 120
-        play_y = 220
+        play_y = 285
         exit_y = play_y + theme.BUTTON_HEIGHT + theme.BUTTON_SPACING
 
         play_rect = self.layout.rect(
@@ -93,7 +98,22 @@ class MainMenu:
             self.btn_color,
             theme.COLOR_BUTTON_DANGER_HOVER,
         )
-        self.panel_rect = self.layout.rect("panel_settings", pygame.Rect(self.width - 280, 180, 220, 260))
+        self.panel_rect = self.layout.rect(
+            "panel_settings",
+            pygame.Rect(self.width - 374, 145, 350, 360),
+        )
+
+    def update(self, delta_time):
+        """Advance the small animated diver shown behind the menu."""
+        self.preview_time += max(0.0, delta_time)
+
+    def _draw_preview(self, surface):
+        theme.draw_gradient_background(surface, self.width, self.height)
+
+        player_x = int(self.width * 0.52)
+        player_y = int(self.height * 0.52 + math.sin(self.preview_time * 1.8) * 8)
+        player_rect = self.preview_player.get_rect(center=(player_x, player_y))
+        surface.blit(self.preview_player, player_rect)
 
     def handle_events(self, event, mouse_pos):
         self.btn_play.check_hover(mouse_pos)
@@ -120,7 +140,7 @@ class MainMenu:
         return None
 
     def draw(self, surface):
-        theme.draw_gradient_background(surface, self.width, self.height)
+        self._draw_preview(surface)
 
         pygame.draw.circle(surface, (20, 120, 140), (self.width // 2, 180), 88, 2)
         pygame.draw.circle(surface, (20, 120, 140), (self.width // 2, 180), 58, 1)
@@ -263,6 +283,91 @@ class EndlessRunConfirmation:
         self.btn_no.draw(surface)
 
 
+class LoreCollectionScreen:
+    """Modal panel showing a located lore fragment snippet."""
+
+    def __init__(self, screen_width, screen_height):
+        self.width = screen_width
+        self.height = screen_height
+        self.layout = load_layout("lore_collection")
+        self.font_headline = pygame.font.Font(None, theme.FONT_HEADLINE)
+        self.font_small = pygame.font.Font(None, theme.FONT_SMALL)
+        self.text_color = theme.COLOR_TEXT
+        self.panel_color = theme.COLOR_PANEL
+        self.btn_color = theme.COLOR_BUTTON
+        self.btn_hover = theme.COLOR_BUTTON_HOVER
+
+        self.visible = False
+        self.text = "The cave keeps its secrets."
+
+        self.panel_rect = self.layout.rect("panel", pygame.Rect(220, 170, 584, 360))
+        dismiss_rect = self.layout.rect("btn_dismiss", pygame.Rect(392, 455, 240, 48))
+        self.btn_dismiss = UIButton(
+            dismiss_rect.x,
+            dismiss_rect.y,
+            dismiss_rect.width,
+            dismiss_rect.height,
+            "Dismiss",
+            self.font_small,
+            self.btn_color,
+            self.btn_hover,
+        )
+
+    def set_text(self, text: str):
+        self.text = text or "The cave keeps its secrets."
+        self.visible = True
+
+    def handle_events(self, event, mouse_pos):
+        if not self.visible:
+            return None
+        self.btn_dismiss.check_hover(mouse_pos)
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            if self.btn_dismiss.handle_event(event):
+                self.visible = False
+                return "DISMISS"
+        return None
+
+    def draw(self, surface):
+        if not self.visible:
+            return
+
+        theme.draw_modal_overlay(surface, self.width, self.height)
+
+        pygame.draw.rect(surface, self.panel_color, self.panel_rect, border_radius=theme.PANEL_BORDER_RADIUS)
+        pygame.draw.rect(
+            surface, theme.COLOR_BORDER, self.panel_rect, theme.PANEL_BORDER_WIDTH, border_radius=theme.PANEL_BORDER_RADIUS
+        )
+
+        title_rect = self.layout.rect("title", pygame.Rect(512, 210, 200, 40))
+        title_surf = self.font_headline.render("Lore Fragment", True, self.text_color)
+        surface.blit(title_surf, title_surf.get_rect(center=title_rect.center))
+
+        body_rect = self.layout.rect("body", pygame.Rect(270, 260, 480, 160))
+        lines = self._wrap_text(self.text, body_rect.width)
+        start_y = body_rect.y + 8
+        for index, line in enumerate(lines[:6]):
+            label = self.font_small.render(line, True, self.text_color)
+            surface.blit(label, (body_rect.x + 8, start_y + index * 28))
+
+        self.btn_dismiss.draw(surface)
+
+    def _wrap_text(self, text: str, width_px: int) -> list[str]:
+        words = text.split()
+        lines: list[str] = []
+        current = ""
+        for word in words:
+            test = f"{current} {word}".strip()
+            rendered = self.font_small.render(test, True, self.text_color)
+            if rendered.get_width() > width_px and current:
+                lines.append(current)
+                current = word
+            else:
+                current = test
+        if current:
+            lines.append(current)
+        return lines or [text]
+
+
 class PauseMenu:
     """A pause overlay with a visible 5-slot hotbar and quit confirmation."""
 
@@ -301,6 +406,17 @@ class PauseMenu:
             theme.BUTTON_WIDTH,
             theme.BUTTON_HEIGHT,
             "Quit to Menu",
+            self.font_large,
+            self.btn_color,
+            theme.COLOR_BUTTON_DANGER_HOVER,
+        )
+        close_rect = pygame.Rect(self.width - 76, 28, 48, 48)
+        self.btn_close = UIButton(
+            close_rect.x,
+            close_rect.y,
+            close_rect.width,
+            close_rect.height,
+            "X",
             self.font_large,
             self.btn_color,
             theme.COLOR_BUTTON_DANGER_HOVER,
@@ -348,6 +464,7 @@ class PauseMenu:
         if not self.confirming_quit:
             self.btn_resume.check_hover(mouse_pos)
             self.btn_quit.check_hover(mouse_pos)
+            self.btn_close.check_hover(mouse_pos)
             if inventory is not None:
                 for index, rect in enumerate(self.inventory_slot_rects()):
                     if rect.collidepoint(mouse_pos):
@@ -369,6 +486,8 @@ class PauseMenu:
 
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if not self.confirming_quit:
+                if self.btn_close.handle_event(event):
+                    return "RESUME"
                 if self.btn_resume.handle_event(event):
                     return "RESUME"
                 if self.btn_quit.handle_event(event):
@@ -390,6 +509,7 @@ class PauseMenu:
             title_rect = title_surf.get_rect(center=(self.width // 2, 120))
             surface.blit(title_surf, title_rect)
 
+            self.btn_close.draw(surface)
             self.btn_resume.draw(surface)
             self.btn_quit.draw(surface)
         else:

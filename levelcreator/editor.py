@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import math
+import random
 import re
 from pathlib import Path
 from typing import Any
@@ -33,7 +34,7 @@ GRID = (34, 47, 56)
 GRID_MAJOR = (47, 61, 71)
 
 DATA_DIR = (Path(__file__).resolve().parents[1] / "TheTwilightZone" / "data" / "cave_sections").resolve()
-WALL_TEXTURE_PATH = (Path(__file__).resolve().parents[1] / "TheTwilightZone" / "assets" / "cave_wall.png").resolve()
+WALL_TEXTURE_PATH = (Path(__file__).resolve().parents[1] / "TheTwilightZone" / "data" / "assets" / "cave_wall.png").resolve()
 LOG_DIR = Path(__file__).resolve().parent / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOG_DIR / "level_creator.log"
@@ -953,14 +954,14 @@ class LevelEditor:
 
         side = pygame.Vector2(-direction.y, direction.x)
         haze_length = max(18.0, float(e.properties.get("haze_length", 95.0)) * self.zoom)
-        haze_width = max(8.0, float(e.properties.get("haze_width", 30.0)) * self.zoom)
+        haze_width = max(0.0, float(e.properties.get("vent_width", 30.0)) * self.zoom)
 
         # Yellow-to-orange plume that originates from the vent mouth.
         for i in range(14):
             t = (i + 1) / 14.0
             start = center + direction * (haze_length * (t - 0.12))
             end = center + direction * (haze_length * t)
-            half_width = haze_width * (0.12 + (1.0 - t) * 0.9)
+            half_width = (haze_width * 0.5) * (0.12 + (1.0 - t) * 0.88)
             polygon = [
                 start - side * half_width,
                 end + side * half_width * 0.7,
@@ -975,12 +976,13 @@ class LevelEditor:
             pygame.draw.polygon(self.screen, (red, green, blue, alpha), [(p.x, p.y) for p in polygon])
 
         bubble_count = max(6, int(e.properties.get("bubble_count", 14)))
-        bubble_spread = max(2.0, float(e.properties.get("bubble_spread", 15.0)) * self.zoom)
+        vent_width = max(2.0, float(e.properties.get("vent_width", 30.0)) * self.zoom)
+        random_source = random.Random(e.element_id)
         for i in range(bubble_count):
             t = (i + 1) / (bubble_count + 1)
-            wobble = ((i % 2) * 2 - 1) * bubble_spread * 0.5 * (0.3 + (1.0 - t))
-            bubble_pos = center + direction * (haze_length * t) + side * wobble
-            bubble_radius = max(1, round((1.0 - t) * 2.5))
+            lateral_offset = random_source.uniform(-vent_width * 0.5, vent_width * 0.5)
+            bubble_pos = center + direction * (haze_length * t) + side * lateral_offset
+            bubble_radius = max(1, round((1.0 - t) * 5.0))
             alpha = max(45, round(160 * (1.0 - t)))
             pygame.draw.circle(self.screen, (255, 236, 190, alpha), (round(bubble_pos.x), round(bubble_pos.y)), bubble_radius)
 

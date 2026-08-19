@@ -10,7 +10,7 @@ from __future__ import annotations
 import math
 import pygame
 
-from assets.fish_model import create_fish_sprite
+from data.assets.fish_model import create_fish_sprite
 
 
 class Fish(pygame.sprite.Sprite):
@@ -272,7 +272,12 @@ class Fish(pygame.sprite.Sprite):
             )
         )
 
+        sprite = self.image
+        if self.velocity.x > 0:
+            sprite = pygame.transform.flip(self.image, True, False)
+
+        sprite_rect = sprite.get_rect(center=screen_rect.center)
         screen.blit(
-            self.image,
-            screen_rect,
+            sprite,
+            sprite_rect,
         )

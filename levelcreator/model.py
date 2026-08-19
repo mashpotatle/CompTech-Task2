@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 DIRECTIONS = ("left", "right", "up", "down")
-ITEM_PRESET_IDS = ("oxygen_tank", "med_kit")
+ITEM_PRESET_IDS = ("oxygen_tank", "med_kit", "lore_fragment")
 
 
 ENTITY_DEFINITIONS: dict[str, dict[str, Any]] = {
@@ -59,13 +59,10 @@ ENTITY_DEFINITIONS: dict[str, dict[str, Any]] = {
             "heat_radius": ("float", 100.0),
             "heat_damage": ("float", 5.0),
             "eruption_damage": ("float", 20.0),
-            "eruption_duration": ("float", 1.0),
-            "eruption_interval": ("float", 5.0),
             "haze_length": ("float", 95.0),
-            "haze_width": ("float", 30.0),
+            "vent_width": ("float", 30.0),
             "haze_alpha": ("int", 65),
             "bubble_count": ("int", 14),
-            "bubble_spread": ("float", 15.0),
             "bubble_speed": ("float", 1.0),
         },
     },

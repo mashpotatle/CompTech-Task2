@@ -43,13 +43,13 @@ PRELOAD_SECTION_COUNT = 3
 
 # Used during development to display useful information such as FPS.
 # This should be disabled for the final release.
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 # Displays collision geometry when enabled.
-DEBUG_COLLISION = True
+DEBUG_COLLISION = False
 
 # Displays the player's collision rectangle.
-DEBUG_PLAYER_COLLISION = True
+DEBUG_PLAYER_COLLISION = False
 
 
 # ---------------------------------------------------------------------------
@@ -71,9 +71,9 @@ class RuntimeSettings:
     max_distance_travelled: int = 0
 
 
-def _coerce_int(value, default: int) -> int:
+def _coerce_int(value, default: int, maximum: int = 100) -> int:
     try:
-        return max(0, min(100, int(value)))
+        return max(0, min(maximum, int(value)))
     except (TypeError, ValueError):
         return default
 
@@ -111,7 +111,11 @@ def load_settings(path: str | Path = SAVE_PATH) -> RuntimeSettings:
     settings.ambience_volume = _coerce_int(data.get("ambience_volume"), settings.ambience_volume)
     settings.menus_volume = _coerce_int(data.get("menus_volume"), settings.menus_volume)
     settings.game_volume = _coerce_int(data.get("game_volume"), settings.game_volume)
-    settings.max_distance_travelled = _coerce_int(data.get("max_distance_travelled"), settings.max_distance_travelled)
+    settings.max_distance_travelled = _coerce_int(
+        data.get("max_distance_travelled"),
+        settings.max_distance_travelled,
+        maximum=2_147_483_647,
+    )
     return settings
 
 
@@ -123,8 +127,12 @@ def save_settings(settings: RuntimeSettings | None = None, path: str | Path = SA
     active_settings = settings or SETTINGS
     payload = asdict(active_settings)
 
-    with file_path.open("w", encoding="utf-8") as handle:
+    temporary_path = file_path.with_suffix(f"{file_path.suffix}.tmp")
+    with temporary_path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, sort_keys=True)
+        handle.flush()
+
+    temporary_path.replace(file_path)
 
     return active_settings
 

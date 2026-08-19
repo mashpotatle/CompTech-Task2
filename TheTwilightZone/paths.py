@@ -11,6 +11,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 DATA_DIR = PROJECT_ROOT / "data"
+ASSETS_DIR = DATA_DIR / "assets"
 UI_LAYOUT_DIR = DATA_DIR / "ui"
 CAVE_SECTIONS_DIR = DATA_DIR / "cave_sections"
 

@@ -167,7 +167,7 @@ class Current(pygame.sprite.Sprite):
             self._draw_visual()
 
     def _draw_visual(self) -> None:
-        """Redraw the current's simple debug-friendly flow visual."""
+        """Redraw a faint directional gradient with a travelling pulse."""
 
         self.image.fill((0, 0, 0, 0))
 
@@ -176,92 +176,47 @@ class Current(pygame.sprite.Sprite):
 
         centre = pygame.Vector2(self.image.get_width() / 2, self.image.get_height() / 2)
         half_size = max(1, int(self.effect_radius))
-
-        # Draw square bounds
         rect = pygame.Rect(
             round(centre.x - half_size),
             round(centre.y - half_size),
             half_size * 2,
-            half_size * 2
-        )
-        pygame.draw.rect(
-            self.image,
-            (60, 140, 220, 55),
-            rect,
-        )
-        pygame.draw.rect(
-            self.image,
-            (100, 190, 245, 130),
-            rect,
-            2,
+            half_size * 2,
         )
 
-        # Three arrows communicate the flow direction. Their phase changes
-        # over time so the current is visibly active rather than a dead blob.
+        self.image.set_clip(rect)
+        pygame.draw.rect(
+            self.image,
+            (55, 145, 235, 10),
+            rect,
+        )
+
         perpendicular = pygame.Vector2(-self.direction.y, self.direction.x)
-        radius = half_size
-        arrow_length = max(8.0, radius * 0.35)
-        phase_offset = (self._animation_time - 0.5) * radius * 0.5
+        flow_span = half_size * (abs(self.direction.x) + abs(self.direction.y))
+        pulse_position = -flow_span + self._animation_time * flow_span * 2.0
+        band_count = max(16, min(32, half_size // 4))
+        band_width = flow_span * 2.0 / band_count
 
-        for index in range(3):
-            lateral = (index - 1) * radius * 0.32
-            centre_line = (
-                centre
-                + perpendicular * lateral
-                - self.direction * phase_offset
-            )
-            start = centre_line - self.direction * (arrow_length * 0.5)
-            end = centre_line + self.direction * (arrow_length * 0.5)
-
-            pygame.draw.line(
-                self.image,
-                (130, 215, 255, 190),
-                (round(start.x), round(start.y)),
-                (round(end.x), round(end.y)),
-                max(1, round(radius / 18)),
-            )
-
-            head_size = max(4.0, radius * 0.12)
-            left = end - self.direction * head_size + perpendicular * head_size * 0.55
-            right = end - self.direction * head_size - perpendicular * head_size * 0.55
+        for index in range(band_count):
+            projection = -flow_span + (index + 0.5) * band_width
+            distance = abs(projection - pulse_position)
+            pulse = max(0.0, 1.0 - distance / max(flow_span * 0.42, 1.0))
+            directional_fade = (projection + flow_span) / max(flow_span * 2.0, 1.0)
+            alpha = int(5 + directional_fade * 7 + pulse * 28)
+            strip_centre = centre + self.direction * projection
+            strip_half_width = band_width * 0.75
+            corners = [
+                strip_centre - self.direction * strip_half_width - perpendicular * flow_span,
+                strip_centre + self.direction * strip_half_width - perpendicular * flow_span,
+                strip_centre + self.direction * strip_half_width + perpendicular * flow_span,
+                strip_centre - self.direction * strip_half_width + perpendicular * flow_span,
+            ]
             pygame.draw.polygon(
                 self.image,
-                (130, 215, 255, 190),
-                [
-                    (round(end.x), round(end.y)),
-                    (round(left.x), round(left.y)),
-                    (round(right.x), round(right.y)),
-                ],
+                (75, 175, 245, alpha),
+                [(round(point.x), round(point.y)) for point in corners],
             )
 
-        # ------------------------------------------------------------------
-        # Bubbles stream
-        # Draw a small stream of bubbles that travel along the flow
-        # direction. Their phase is driven by _animation_time so they
-        # appear to move through the current.
-        # ------------------------------------------------------------------
-
-        bubble_count = max(4, int(radius // 6))
-        for i in range(bubble_count):
-            t = (self._animation_time + i * 0.12) % 1.0
-
-            # Bubble position moves from the centre backwards along the
-            # current direction. t==0 is near the centre, t==1 at the edge.
-            bubble_pos = centre - self.direction * (t * radius * 0.9)
-
-            # Small lateral wobble so bubbles aren't perfectly centred.
-            lateral = perpendicular * (math.sin((t + i) * math.tau) * (radius * 0.06))
-            bubble_pos += lateral
-
-            alpha = int(220 * (1.0 - t))
-            bubble_radius = max(1, int(max(1, radius * 0.04) * (1.0 - t)))
-
-            pygame.draw.circle(
-                self.image,
-                (200, 230, 255, alpha),
-                (round(bubble_pos.x), round(bubble_pos.y)),
-                bubble_radius,
-            )
+        self.image.set_clip(None)
 
     def draw(self, screen: pygame.Surface, camera=None) -> None:
         """Draw the current using the game's world-to-screen camera API."""

@@ -8,7 +8,7 @@ will be added in later development stages.
 
 import pygame
 
-from assets.player_model import create_player_sprite
+from data.assets.player_model import create_player_sprite
 from settings import SCREEN_HEIGHT, SCREEN_WIDTH, PLAYER_WIDTH, PLAYER_HEIGHT
 from systems.collision import CollisionSystem
 import math
@@ -43,12 +43,11 @@ class Player:
         # Keep visual sprite dimensions separate from collision dimensions.
         self.width = PLAYER_WIDTH
         self.height = PLAYER_HEIGHT
-        self.collision_base_width = max(1, round(self.width / 1.5))
-        self.collision_base_height = max(1, round(self.height / 1.5))
+        self.collision_base_width = round(self.width / 1.5)
+        self.collision_base_height = round(self.height / 1.5)
         self.facing = 1
         self.pitch_input = 0
         self.max_pitch_degrees = 18
-        self.hitbox_max_pitch_degrees = 90
 
         # Create a rectangular hitbox centred around the player's
         # position. This will later be used for collision detection.
@@ -76,6 +75,14 @@ class Player:
         self.wobble_strength = 0.0
         self.wobble_timer = 0.0
         self._wobble_time = 0.0
+
+        # Triggered when the player collides with a solid cave wall so the
+        # game can play the scrape SFX and show brief contact feedback.
+        self.wall_scrape_pending = False
+        self.wall_scrape_cooldown = 0.0
+        self.wall_touching = False
+        self.wall_scrape_buffer = 0.0
+        self.wall_scrape_active = False
 
         self.sprite = create_player_sprite(self.width, self.height)
 
@@ -125,37 +132,12 @@ class Player:
 
         return -self.pitch_input * self.max_pitch_degrees * self.facing
 
-    def _get_hitbox_pitch_angle(self) -> float:
-        """Return hitbox pitch in degrees for collision shape projection."""
-
-        return self.pitch_input * self.hitbox_max_pitch_degrees
-
     def _update_collision_rect_dimensions(self) -> None:
-        """Resize collision rect to match pitched hitbox projection."""
+        """Keep the hitbox a fixed square sized to the shorter base side."""
 
-        angle = math.radians(abs(self._get_hitbox_pitch_angle()))
-        cos_angle = abs(math.cos(angle))
-        sin_angle = abs(math.sin(angle))
+        side = min(self.collision_base_width, self.collision_base_height)
 
-        rotated_width = max(
-            1,
-            round(
-                self.collision_base_width * cos_angle
-                + self.collision_base_height * sin_angle
-            ),
-        )
-        rotated_height = max(
-            1,
-            round(
-                self.collision_base_width * sin_angle
-                + self.collision_base_height * cos_angle
-            ),
-        )
-
-        self.rect.size = (
-            rotated_width,
-            rotated_height,
-        )
+        self.rect.size = (side, side)
         self.rect.center = (
             round(self.position.x),
             round(self.position.y),
@@ -181,62 +163,114 @@ class Player:
         )
 
         self._update_collision_rect_dimensions()
+        self.wall_touching = False
 
         # ---------------------------------------------------------------
-        # Horizontal Movement
+        # Full Diagonal Movement
         # ---------------------------------------------------------------
+        # Try the full intended movement first. If it is blocked, attempt
+        # to slide along the nearest wall surface (its tangent direction)
+        # instead of stopping dead, so curved walls redirect the player
+        # smoothly like in Among Us.
 
-        self.position.x += movement.x
-        self.rect.centerx = round(self.position.x)
+        if movement.length_squared() > 0:
 
-        if collision_system.check_collision(self.rect):
-            # Undo the movement if it caused a collision.
-            self.position.x -= movement.x
-            self.rect.centerx = round(self.position.x)
+            self.position += movement
+            self.rect.center = (
+                round(self.position.x),
+                round(self.position.y),
+            )
 
-        # ---------------------------------------------------------------
-        # Vertical Movement
-        # ---------------------------------------------------------------
+            if collision_system.check_collision(self.rect):
 
-        self.position.y += movement.y
-        self.rect.centery = round(self.position.y)
+                self.position -= movement
+                self.rect.center = (
+                    round(self.position.x),
+                    round(self.position.y),
+                )
 
-        if collision_system.check_collision(self.rect):
-            # Undo the movement if it caused a collision.
-            self.position.y -= movement.y
-            self.rect.centery = round(self.position.y)
+                slide_movement = collision_system.get_slide_vector(
+                    self.rect,
+                    movement,
+                )
+
+                slid = False
+
+                if slide_movement.length_squared() > 0.0001:
+                    self.position += slide_movement
+                    self.rect.center = (
+                        round(self.position.x),
+                        round(self.position.y),
+                    )
+
+                    if collision_system.check_collision(self.rect):
+                        self.position -= slide_movement
+                        self.rect.center = (
+                            round(self.position.x),
+                            round(self.position.y),
+                        )
+                    else:
+                        slid = True
+                        self.wall_touching = True
+                        if not self.wall_scrape_active:
+                            self._trigger_wall_scrape()
+
+                if not slid:
+                    # Fall back to resolving each axis independently so
+                    # corners and dead ends still block movement cleanly.
+
+                    # Horizontal Movement
+                    self.position.x += movement.x
+                    self.rect.centerx = round(self.position.x)
+
+                    if collision_system.check_collision(self.rect):
+                        self.position.x -= movement.x
+                        self.rect.centerx = round(self.position.x)
+                        self.wall_touching = True
+                        if not self.wall_scrape_active:
+                            self._trigger_wall_scrape()
+
+                    # Vertical Movement
+                    self.position.y += movement.y
+                    self.rect.centery = round(self.position.y)
+
+                    if collision_system.check_collision(self.rect):
+                        self.position.y -= movement.y
+                        self.rect.centery = round(self.position.y)
+                        self.wall_touching = True
+                        if not self.wall_scrape_active:
+                            self._trigger_wall_scrape()
 
         # Update wobble visual timer
         if delta_time is not None and delta_time > 0:
             self._wobble_time += delta_time
+            self.wall_scrape_cooldown = max(0.0, self.wall_scrape_cooldown - delta_time)
+            self.wall_scrape_buffer = max(0.0, self.wall_scrape_buffer - delta_time)
             if self.wobble_timer > 0:
                 self.wobble_timer = max(0.0, self.wobble_timer - delta_time)
                 if self.wobble_timer == 0.0:
                     self.wobble_strength = 0.0
 
-        # ---------------------------------------------------------------
-        # Horizontal Movement
-        # ---------------------------------------------------------------
+    def _trigger_wall_scrape(self):
+        """Begin a single wall-scrape contact phase."""
+        self.wall_scrape_pending = True
+        self.wall_scrape_active = True
+        self.wall_scrape_cooldown = 0.12
+        self.wall_scrape_buffer = 0.12
 
-        self.position.x += movement.x
-        self.rect.centerx = round(self.position.x)
+    def consume_wall_scrape(self) -> bool:
+        """Clear the pending wall-scrape flag and return whether a scrape just happened."""
+        if not self.wall_scrape_pending:
+            return False
+        self.wall_scrape_pending = False
+        return True
 
-        if collision_system.check_collision(self.rect):
-            # Undo the movement if it caused a collision.
-            self.position.x -= movement.x
-            self.rect.centerx = round(self.position.x)
-
-        # ---------------------------------------------------------------
-        # Vertical Movement
-        # ---------------------------------------------------------------
-
-        self.position.y += movement.y
-        self.rect.centery = round(self.position.y)
-
-        if collision_system.check_collision(self.rect):
-            # Undo the movement if it caused a collision.
-            self.position.y -= movement.y
-            self.rect.centery = round(self.position.y)
+    def end_wall_scrape(self) -> None:
+        """Mark the current wall-scrape phase as finished."""
+        self.wall_scrape_active = False
+        self.wall_scrape_pending = False
+        self.wall_scrape_cooldown = 0.0
+        self.wall_scrape_buffer = 0.0
 
     def keep_on_screen(self):
         """

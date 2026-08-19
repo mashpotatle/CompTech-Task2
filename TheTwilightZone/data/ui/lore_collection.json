@@ -1,0 +1,11 @@
+{
+  "reference_width": 1024,
+  "reference_height": 768,
+  "widgets": [
+    {"id": "panel", "x": 220, "y": 170, "w": 584, "h": 360},
+    {"id": "title", "x": 512, "y": 210, "w": 200, "h": 40},
+    {"id": "body", "x": 270, "y": 260, "w": 480, "h": 160},
+    {"id": "btn_dismiss", "x": 392, "y": 455, "w": 240, "h": 48},
+    {"id": "heading", "text": "Lore Fragment", "color": [255, 255, 255]}
+  ]
+}

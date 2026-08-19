@@ -71,12 +71,16 @@ class LevelManager:
             for path in sorted(
                 (Path(data_directory)).glob("*.json")
             )
-            if path.is_file()
+            if path.is_file() and path.name != "section_00.json"
         ]
 
         self.available_sections = list(
             dict.fromkeys(
-                [*available_sections, *discovered_sections]
+                [
+                    filename
+                    for filename in [*available_sections, *discovered_sections]
+                    if filename != "section_00.json"
+                ]
             )
         )
 
